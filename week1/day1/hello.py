@@ -388,3 +388,72 @@ for i in range(10):
     if i % 2 == 0:
         continue
     print(i)    # prints 1, 3, 5, 7, 9 (skips even numbers)
+
+
+
+# Creating a set
+skills = {"Python", "Java", "SQL", "Python"}
+print(skills)    # {"Python", "Java", "SQL"} — duplicates removed automatically
+
+empty_set = set()    # To create an empty set, use set(), NOT {} 
+                     # {} creates an empty dictionary, not a set!
+
+# Adding items:
+skills.add("React")           # Add one item
+skills.update(["Docker", "Git"])  # Add multiple items at once
+
+# Removing items:
+skills.remove("Java")         # Remove — gives ERROR if item doesn't exist
+skills.discard("C++")         # Remove — NO error if item doesn't exist (safer!)
+skills.pop()                  # Remove and return a random item
+skills.clear()                # Remove ALL items (empty the set)
+
+# Checking:
+"Python" in skills            # True (is this item in the set?)
+"Rust" not in skills          # True (is this item NOT in the set?)
+len(skills)                   # Number of items
+
+# Set operations (this is where sets really shine):
+frontend = {"HTML", "CSS", "JavaScript", "React"}
+backend = {"Python", "Node.js", "JavaScript", "SQL"}
+
+# Intersection — what's COMMON in both:
+frontend & backend                    # {"JavaScript"}
+frontend.intersection(backend)        # {"JavaScript"} (same thing, different syntax)
+
+# Union — EVERYTHING from both (no duplicates):
+frontend | backend                    # {"HTML", "CSS", "JavaScript", "React", "Python", "Node.js", "SQL"}
+frontend.union(backend)               # Same thing
+
+# Difference — in first but NOT in second:
+frontend - backend                    # {"HTML", "CSS", "React"}
+frontend.difference(backend)          # Same thing
+
+backend - frontend                    # {"Python", "Node.js", "SQL"}
+backend.difference(frontend)          # Same thing
+
+# Symmetric Difference — in one OR the other, but NOT both:
+frontend ^ backend                    # {"HTML", "CSS", "React", "Python", "Node.js", "SQL"}
+frontend.symmetric_difference(backend)  # Same thing (JavaScript is excluded because it's in BOTH)
+
+# Subset and Superset:
+small = {"Python", "SQL"}
+big = {"Python", "SQL", "Java", "React"}
+
+small.issubset(big)      # True (every item in small is also in big)
+big.issuperset(small)    # True (big contains everything in small)
+small.isdisjoint(backend)  # False (they share "Python" and "SQL")
+
+# Looping through a set:
+for skill in skills:
+    print(skill)
+# Note: order is NOT guaranteed! Sets are unordered.
+
+# Converting between set and list:
+my_list = [1, 2, 2, 3, 3, 3, 4]
+unique = set(my_list)         # {1, 2, 3, 4} — quick way to remove duplicates!
+back_to_list = list(unique)   # [1, 2, 3, 4] — convert back if you need a list
+
+# Frozen set — an IMMUTABLE set (cannot add/remove):
+permanent = frozenset(["Python", "SQL", "Git"])
+# permanent.add("Java")  # ERROR! Cannot modify a frozenset
