@@ -55,7 +55,7 @@ Before starting this journey, I had experience with:
 
 ## Setup Guide — Complete Reference
 
-> This section documents everything I learned about setting up a development environment from scratch on Windows. Written so that if I open this 6 months later, I can recollect everything.
+> This section documents everything I learned about setting up a development environment from scratch on Windows. 
 
 ---
 
