@@ -3377,6 +3377,352 @@ Nothing you learned today gets thrown away. Every line is foundation.
 
 
 
+## Day 3 — Data Structures Quick-Reference Cheat Sheet
+
+> Built for fast scanning. When you forget "how do I delete a key from a dict again?" — Ctrl+F here.
+
+---
+
+### Pick the Right Structure
+
+| Need | Use | Why |
+|---|---|---|
+| Order matters, will change | **list** `[]` | Indexed, mutable |
+| Key → value lookup | **dict** `{}` | Fast lookup by name |
+| Unique items only / membership tests | **set** `{}` | Auto-dedupe, instant `in` checks |
+| Fixed group of values, won't change | **tuple** `()` | Immutable, hashable, lightweight |
+
+---
+
+### 📋 LIST — Ordered, Mutable, Allows Duplicates
+
+```python
+items = ["a", "b", "c", "d"]
+```
+
+#### Create
+| Operation | Syntax | Example |
+|---|---|---|
+| Empty list | `items = []` | `items = []` |
+| With values | `items = [v1, v2, ...]` | `items = ["a", "b", "c"]` |
+| From range | `items = list(range(5))` | `[0, 1, 2, 3, 4]` |
+| From string | `items = list("abc")` | `["a", "b", "c"]` |
+| Repeat values | `items = [0] * 5` | `[0, 0, 0, 0, 0]` |
+
+#### Access
+| Operation | Syntax | Example | Returns |
+|---|---|---|---|
+| First item | `items[0]` | `items[0]` | `"a"` |
+| Last item | `items[-1]` | `items[-1]` | `"d"` |
+| Slice | `items[start:stop]` | `items[1:3]` | `["b", "c"]` |
+| Reverse | `items[::-1]` | `items[::-1]` | `["d", "c", "b", "a"]` |
+| Every Nth | `items[::N]` | `items[::2]` | `["a", "c"]` |
+| Length | `len(items)` | `len(items)` | `4` |
+
+#### Add
+| Operation | Syntax | Example | Result |
+|---|---|---|---|
+| Add ONE to end | `items.append(x)` | `items.append("e")` | `["a","b","c","d","e"]` |
+| Add MANY to end | `items.extend(other)` | `items.extend(["e","f"])` | `["a","b","c","d","e","f"]` |
+| Insert at index | `items.insert(i, x)` | `items.insert(1, "X")` | `["a","X","b","c","d"]` |
+| Concatenate | `items + other` | `items + ["e","f"]` | new list |
+
+> ⚠️ `append([1,2])` adds the LIST as one item. Use `extend([1,2])` to merge.
+
+#### Update
+| Operation | Syntax | Example | Result |
+|---|---|---|---|
+| Replace by index | `items[i] = x` | `items[0] = "Z"` | `["Z","b","c","d"]` |
+| Replace slice | `items[i:j] = list` | `items[1:3] = ["X","Y"]` | `["a","X","Y","d"]` |
+
+#### Delete
+| Operation | Syntax | Example | Notes |
+|---|---|---|---|
+| By value (first match) | `items.remove(x)` | `items.remove("b")` | Errors if missing |
+| By index, return it | `items.pop(i)` | `items.pop(0)` | Default is last item |
+| By index, no return | `del items[i]` | `del items[0]` | |
+| Slice | `del items[i:j]` | `del items[1:3]` | |
+| Empty the list | `items.clear()` | `items.clear()` | `[]` |
+
+#### Search & Inspect
+| Operation | Syntax | Example | Returns |
+|---|---|---|---|
+| Exists? | `x in items` | `"b" in items` | `True`/`False` |
+| Find index | `items.index(x)` | `items.index("c")` | `2` (errors if missing) |
+| Count occurrences | `items.count(x)` | `items.count("a")` | `1` |
+| Min / Max | `min(items)` / `max(items)` | `max([3,1,4])` | `4` |
+| Sum | `sum(items)` | `sum([1,2,3])` | `6` |
+
+#### Sort & Reverse
+| Operation | Syntax | Notes |
+|---|---|---|
+| Sort in place | `items.sort()` | Modifies original |
+| Sort, return new | `sorted(items)` | Original unchanged |
+| Sort descending | `sorted(items, reverse=True)` | |
+| Sort by key | `sorted(items, key=lambda x: x["score"])` | Custom field |
+| Reverse in place | `items.reverse()` | |
+
+#### Copy
+| Operation | Syntax | Notes |
+|---|---|---|
+| Shallow copy | `items.copy()` or `items[:]` | New list, same inner objects |
+| Deep copy | `copy.deepcopy(items)` | `import copy` first |
+
+---
+
+### 📖 DICT — Key→Value, Mutable, Keys Must Be Unique
+
+```python
+person = {"name": "Ravi", "age": 25, "dept": "Eng"}
+```
+
+#### Create
+| Operation | Syntax | Example |
+|---|---|---|
+| Empty dict | `d = {}` | |
+| With values | `d = {"k": "v"}` | `{"name": "Ravi"}` |
+| From pairs | `dict([(k,v), (k,v)])` | `dict([("a",1),("b",2)])` |
+| From two lists | `dict(zip(keys, vals))` | `dict(zip(["a","b"],[1,2]))` |
+| From keys, same value | `dict.fromkeys(keys, 0)` | `{"a":0,"b":0}` |
+
+#### Access
+| Operation | Syntax | Example | Returns |
+|---|---|---|---|
+| By key (strict) | `d[key]` | `person["name"]` | `"Ravi"` (errors if missing) |
+| By key (safe) | `d.get(key)` | `person.get("salary")` | `None` if missing |
+| By key, with default | `d.get(key, default)` | `person.get("salary", 0)` | `0` if missing |
+| All keys | `d.keys()` | `person.keys()` | `dict_keys([...])` |
+| All values | `d.values()` | `person.values()` | `dict_values([...])` |
+| All pairs | `d.items()` | `person.items()` | `dict_items([(k,v)...])` |
+| Length | `len(d)` | `len(person)` | `3` |
+
+#### Add / Update
+| Operation | Syntax | Example |
+|---|---|---|
+| Add or update key | `d[key] = value` | `person["salary"] = 800000` |
+| Update many | `d.update(other_dict)` | `person.update({"age":26, "city":"NYC"})` |
+| Add only if missing | `d.setdefault(key, default)` | `person.setdefault("city", "Unknown")` |
+| Merge (Python 3.9+) | `d1 \| d2` | `defaults \| overrides` |
+| Merge (any version) | `{**d1, **d2}` | `{**defaults, **overrides}` |
+
+> 💡 `setdefault` is gold for grouping — `groups.setdefault(key, []).append(item)`.
+
+#### Delete
+| Operation | Syntax | Example | Notes |
+|---|---|---|---|
+| Remove key, return value | `d.pop(key)` | `person.pop("age")` | Errors if missing |
+| Remove key, with default | `d.pop(key, None)` | `person.pop("foo", None)` | Safe |
+| Remove key, no return | `del d[key]` | `del person["age"]` | Errors if missing |
+| Remove last inserted | `d.popitem()` | | Returns `(key, value)` |
+| Empty the dict | `d.clear()` | | `{}` |
+
+#### Search
+| Operation | Syntax | Example | Returns |
+|---|---|---|---|
+| Key exists? | `key in d` | `"name" in person` | `True` |
+| Key missing? | `key not in d` | `"salary" not in person` | `True` |
+| Value exists? | `value in d.values()` | `25 in person.values()` | `True` |
+
+#### Iterate
+| What you want | Syntax |
+|---|---|
+| Just keys | `for k in d:` or `for k in d.keys():` |
+| Just values | `for v in d.values():` |
+| Both (most common) | `for k, v in d.items():` |
+| Filter while iterating | `{k: v for k, v in d.items() if v > 0}` |
+
+---
+
+### 🎯 SET — Unique, Unordered, Fast Membership Tests
+
+```python
+skills = {"Python", "SQL", "FastAPI"}
+```
+
+#### Create
+| Operation | Syntax | Example |
+|---|---|---|
+| Empty set | `s = set()` | ⚠️ NOT `{}` (that's a dict!) |
+| With values | `s = {v1, v2, ...}` | `{"a", "b", "c"}` |
+| From list (dedupe) | `s = set(list)` | `set([1,1,2,3])` → `{1,2,3}` |
+| From string | `s = set("hello")` | `{"h","e","l","o"}` |
+
+#### Access
+> Sets have **no indexing** — no `s[0]`. They're unordered.
+
+| Operation | Syntax | Returns |
+|---|---|---|
+| Length | `len(s)` | int |
+| Convert to list | `list(s)` | order not guaranteed |
+| Iterate | `for x in s:` | order not guaranteed |
+
+#### Add
+| Operation | Syntax | Example |
+|---|---|---|
+| Add one | `s.add(x)` | `skills.add("Rust")` |
+| Add many | `s.update(iterable)` | `skills.update(["Go", "Java"])` |
+
+#### Delete
+| Operation | Syntax | Behavior if missing |
+|---|---|---|
+| Remove (strict) | `s.remove(x)` | Raises `KeyError` |
+| Remove (safe) | `s.discard(x)` | No error |
+| Remove arbitrary | `s.pop()` | Returns removed item |
+| Empty the set | `s.clear()` | |
+
+> 💡 Use `.discard()` when you don't care if it's there, `.remove()` when you do.
+
+#### Search
+| Operation | Syntax | Example | Speed |
+|---|---|---|---|
+| Exists? | `x in s` | `"Python" in skills` | **O(1) — instant** |
+| Not exists? | `x not in s` | | |
+
+#### Set Operations (the whole point of sets)
+
+| Operation | Operator | Method | Means |
+|---|---|---|---|
+| Union | `a \| b` | `a.union(b)` | Everything in either |
+| Intersection | `a & b` | `a.intersection(b)` | In BOTH |
+| Difference | `a - b` | `a.difference(b)` | In `a` but NOT `b` |
+| Symmetric diff | `a ^ b` | `a.symmetric_difference(b)` | In one but not both |
+| Subset? | `a <= b` | `a.issubset(b)` | All of `a` in `b`? |
+| Superset? | `a >= b` | `a.issuperset(b)` | `a` contains all of `b`? |
+| Disjoint? | — | `a.isdisjoint(b)` | No common items? |
+
+**Visual:**
+```
+a = {1, 2, 3}    b = {3, 4, 5}
+
+a | b → {1, 2, 3, 4, 5}    (union — everything)
+a & b → {3}                (intersection — overlap)
+a - b → {1, 2}             (difference — only in a)
+a ^ b → {1, 2, 4, 5}       (symmetric — exclusive to each)
+```
+
+---
+
+### 📦 TUPLE — Ordered, IMMUTABLE, Allows Duplicates
+
+```python
+point = (10, 20)
+```
+
+#### Create
+| Operation | Syntax | Example |
+|---|---|---|
+| Empty tuple | `t = ()` | |
+| With values | `t = (v1, v2, ...)` | `(1, 2, 3)` |
+| Single value | `t = (v,)` | ⚠️ `(5)` is just `5`. Need the comma. |
+| Without parens | `t = 1, 2, 3` | Same as `(1, 2, 3)` |
+| From list | `t = tuple(list)` | `tuple([1,2,3])` |
+
+#### Access
+| Operation | Syntax | Example | Returns |
+|---|---|---|---|
+| By index | `t[i]` | `point[0]` | `10` |
+| Slice | `t[i:j]` | `(1,2,3,4)[1:3]` | `(2, 3)` |
+| Length | `len(t)` | | int |
+| Unpack | `a, b = t` | `x, y = point` | `x=10, y=20` |
+| Rest unpack | `first, *rest = t` | | |
+
+#### Add / Update / Delete
+> ❌ **You can't.** Tuples are immutable. Create a new tuple instead.
+
+```python
+# To "add" — create new tuple
+new = old + (extra,)
+
+# To "update" — convert, change, convert back
+items = list(old)
+items[0] = "X"
+new = tuple(items)
+```
+
+#### Search
+| Operation | Syntax | Returns |
+|---|---|---|
+| Exists? | `x in t` | bool |
+| Find index | `t.index(x)` | int (errors if missing) |
+| Count | `t.count(x)` | int |
+
+#### Named Tuples (when you want clarity)
+```python
+from collections import namedtuple
+Point = namedtuple("Point", ["x", "y"])
+p = Point(10, 20)
+p.x          # 10  (access by name)
+p[0]         # 10  (still works by index)
+```
+
+---
+
+### 🧠 Memory Tricks
+
+| Trick | Remember |
+|---|---|
+| `[]` = list, `{}` = **dict**, `set()` = set, `()` = tuple | Empty `{}` is a dict, NOT a set! |
+| `append` adds ONE, `extend` adds MANY | "extend" sounds bigger → handles multiple |
+| `.remove(x)` works on **list** and **set** by VALUE | Both error if missing |
+| `.pop()` works on list (index), dict (key), set (random) | Always returns the removed thing |
+| `.get()` is dict's safe access | Lists don't have `.get()` |
+| Set operations: \| & - ^ | Like math — union, intersect, subtract |
+| Tuples can't change | Use them when data is FINAL |
+
+---
+
+### 🎯 Operations Comparison — One Glance
+
+| Operation | List | Dict | Set | Tuple |
+|---|---|---|---|---|
+| Create empty | `[]` | `{}` | `set()` | `()` |
+| Length | `len(x)` | `len(x)` | `len(x)` | `len(x)` |
+| Membership | `v in list` | `key in dict` | `v in set` | `v in tuple` |
+| Add | `.append()` / `.extend()` | `d[k]=v` / `.update()` | `.add()` / `.update()` | ❌ |
+| Update | `list[i]=v` | `d[k]=v` | ❌ (remove + add) | ❌ |
+| Delete | `.remove()` / `.pop()` / `del` | `.pop()` / `del` | `.discard()` / `.remove()` | ❌ |
+| Access by index | ✅ `list[0]` | ❌ | ❌ | ✅ `tuple[0]` |
+| Access by key | ❌ | ✅ `d["k"]` | ❌ | ❌ |
+| Allow duplicates | ✅ | Keys: ❌ / Values: ✅ | ❌ | ✅ |
+| Ordered | ✅ | ✅ (since 3.7) | ❌ | ✅ |
+| Mutable | ✅ | ✅ | ✅ | ❌ |
+| Iterable | ✅ | ✅ (keys) | ✅ | ✅ |
+
+---
+
+### 💡 The Patterns You'll Use Daily in AI Work
+
+```python
+# 1. Group items by a field (RAG chunks by source, messages by user)
+groups = {}
+for item in items:
+    groups.setdefault(item["category"], []).append(item)
+
+# 2. Deduplicate while preserving order (clean retrieval results)
+seen = set()
+unique = [x for x in items if not (x in seen or seen.add(x))]
+
+# 3. Top-K by score (top retrievals to feed an LLM)
+top_k = sorted(results, key=lambda r: r["score"], reverse=True)[:5]
+
+# 4. Safe nested access (parsing API responses)
+text = response.get("content", [{}])[0].get("text", "")
+
+# 5. Merge configs (defaults + overrides)
+config = {**defaults, **user_overrides}
+
+# 6. Count occurrences (token frequency, model usage)
+from collections import Counter
+counts = Counter(item["model"] for item in api_calls)
+
+# 7. Compare two collections (skills you have vs need)
+missing = set(required) - set(have)
+
+# 8. Filter + transform in one shot
+expensive_calls = [c["id"] for c in calls if c["cost"] > 0.05]
+```
+
+
 
 ### Day 3 — Data Structures Deep Dive
 
