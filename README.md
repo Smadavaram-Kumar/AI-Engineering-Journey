@@ -3373,3 +3373,534 @@ Nothing you learned today gets thrown away. Every line is foundation.
 > **Note to future me:** If you're reading this after a long break, you don't need to start over. The cheat sheets at the end are your quick reference. Functions are Actions, modules are .py files, packages are folders, sys.path is just a list, env vars are key-value pairs. Five sentences. The whole day in five sentences.
 
 > **Note to future me, part 2:** When something import-related breaks, your first move is `python -c "import sys; print(sys.path)"`. When something env-var related breaks, your first move is `python -c "import os; print(os.environ.get('VAR_NAME'))"`. Most "magic" problems disappear once you can see what Python actually sees.
+
+
+
+
+
+### Day 3 — Data Structures Deep Dive
+
+> **Goal:** Master the four Python collections (list, dict, set, tuple) — because every AI API response, embedding vector, conversation history, and document chunk lives inside one of them. If Day 1 was learning the alphabet, today is learning to form sentences.
+
+#### Why This Day Matters for AI Engineering
+
+Almost everything in AI engineering is data shuffling between collections. Get fluent with these four structures and you can wire up any LLM application.
+
+| What you're doing | Data structure involved |
+|---|---|
+| Parsing Claude's API response | Nested dict |
+| Storing conversation history | List of dicts |
+| Chunking a PDF for RAG | List of strings |
+| Embedding a document | List of floats (vector) |
+| Tracking unique tokens / dedup chunks | Set |
+| Returning `(answer, confidence_score)` | Tuple |
+| Storing model config | Dict |
+| Filtering messages by role | List comprehension |
+| Counting tokens per user | Dict comprehension |
+| Finding skills you have vs need | Set operations |
+
+---
+
+#### 1. Lists — Ordered, Mutable, Your Workhorse
+
+A list is an ordered, changeable collection. In AI work, you'll use lists for: conversation history, document chunks, embedding vectors, batch inputs, and search results.
+
+**Slicing — `list[start:stop:step]`**
+
+Slicing grabs a piece of a list without writing a loop.
+
+```python
+chunks = ["intro", "chapter1", "chapter2", "chapter3", "chapter4", "summary"]
+
+chunks[0]          # "intro"     — first
+chunks[-1]         # "summary"   — last
+chunks[1:4]        # ["chapter1", "chapter2", "chapter3"]   — middle slice
+chunks[:3]         # ["intro", "chapter1", "chapter2"]      — first 3
+chunks[3:]         # ["chapter3", "chapter4", "summary"]    — from index 3 onward
+chunks[::2]        # ["intro", "chapter2", "chapter4"]      — every 2nd item
+chunks[::-1]       # reversed list
+```
+
+The `start:stop:step` rule:
+- `start` is inclusive
+- `stop` is **exclusive**
+- `step` is how many to skip
+
+> ⚠️ This is THE most common slicing bug — `chunks[1:4]` gives you indexes 1, 2, 3 (NOT 4).
+
+**Real AI use case — sliding context window:**
+```python
+conversation = [...]  # list of message dicts
+recent = conversation[-10:]   # Last 10 messages — keep context window small
+```
+
+**`append` vs `extend` — Critical Difference**
+
+Most beginners confuse these, and it causes silent bugs in AI pipelines (you accidentally end up with a list of lists instead of a flat list).
+
+```python
+history = ["hi", "hello"]
+
+# append() — adds ONE item, whatever it is
+history.append("how are you")
+# ["hi", "hello", "how are you"]
+
+history.append(["new", "messages"])
+# ["hi", "hello", "how are you", ["new", "messages"]]
+#                                ↑ a list INSIDE a list — usually a bug
+
+# extend() — unpacks an iterable and adds each item
+history = ["hi", "hello"]
+history.extend(["new", "messages"])
+# ["hi", "hello", "new", "messages"]   ← what you usually want
+```
+
+**Rule of thumb:**
+- Adding ONE message? → `.append(message)`
+- Merging two conversation lists? → `.extend(other_list)`
+
+**Sorting — `sort()` vs `sorted()`**
+
+```python
+numbers = [3, 1, 4, 1, 5, 9, 2, 6]
+
+# sort() — modifies the original list, returns None
+numbers.sort()
+# numbers is now [1, 1, 2, 3, 4, 5, 6, 9]
+
+# sorted() — returns a NEW sorted list, original unchanged
+original = [3, 1, 4]
+new_list = sorted(original)
+# original = [3, 1, 4] (unchanged), new_list = [1, 3, 4]
+```
+
+**Sorting with a `key` function — incredibly common in AI work:**
+
+```python
+# Sort search results by relevance score (highest first)
+results = [
+    {"text": "doc A", "score": 0.72},
+    {"text": "doc B", "score": 0.91},
+    {"text": "doc C", "score": 0.65},
+]
+
+sorted_results = sorted(results, key=lambda r: r["score"], reverse=True)
+top_3 = sorted_results[:3]   # Top 3 retrievals — pass to the LLM as context
+```
+
+A `lambda` is just an inline tiny function. `lambda r: r["score"]` means "given r, return r['score']."
+
+**`filter()` and List Comprehensions**
+
+Both filter a list, but comprehensions are the Pythonic choice.
+
+```python
+messages = [
+    {"role": "user",      "content": "hi"},
+    {"role": "assistant", "content": "hello"},
+    {"role": "user",      "content": "how are you?"},
+]
+
+# Using filter() — works but rarely seen in modern Python
+user_msgs = list(filter(lambda m: m["role"] == "user", messages))
+
+# Using a list comprehension — preferred
+user_msgs = [m for m in messages if m["role"] == "user"]
+```
+
+**List comprehension cookbook:**
+
+```python
+tokens = [10, 25, 40, 15]
+
+# Basic transform — cost per call at $0.003 per token
+costs = [t * 0.003 for t in tokens]
+
+# With condition
+expensive = [t for t in tokens if t > 20]              # [25, 40]
+
+# Transform AND filter
+high_cost = [t * 0.003 for t in tokens if t > 20]      # [0.075, 0.12]
+
+# Nested — flatten a list of batches
+batches = [["a", "b"], ["c", "d"], ["e"]]
+flat = [item for batch in batches for item in batch]   # ["a", "b", "c", "d", "e"]
+
+# With if-else (transform every item, choose between values)
+labels = ["short" if t < 20 else "long" for t in tokens]
+# ["short", "long", "long", "short"]
+```
+
+> ⚠️ Comprehensions are powerful, but if one needs more than one `if` and one `for`, write a regular `for` loop. Readability beats cleverness.
+
+---
+
+#### 2. Dictionaries — The Most Important Structure for AI
+
+> Every Claude API response is a dict. Every JSON config is a dict. Every embedding metadata record is a dict. **Master this one.**
+
+**Nested Dictionaries — Real Claude API Response Shape**
+
+```python
+api_response = {
+    "id": "msg_abc123",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+        {"type": "text", "text": "The capital of France is Paris."}
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "stop_reason": "end_turn",
+    "usage": {
+        "input_tokens": 12,
+        "output_tokens": 8,
+        "cache_read_input_tokens": 0
+    }
+}
+
+# Drilling into nested structure
+answer = api_response["content"][0]["text"]
+# "The capital of France is Paris."
+
+input_tokens  = api_response["usage"]["input_tokens"]
+output_tokens = api_response["usage"]["output_tokens"]
+total_tokens  = input_tokens + output_tokens
+```
+
+The pattern is always: `dict["key"][index]["key"][...]`. Read it left to right like a path.
+
+**`.get()` — Defensive Coding for APIs**
+
+API responses sometimes drop optional fields. `dict[key]` crashes; `dict.get(key)` returns `None` (or a default). Use `.get()` whenever a field is optional.
+
+```python
+# DANGEROUS — crashes with KeyError if "cache_read_input_tokens" is missing
+cache_tokens = api_response["usage"]["cache_read_input_tokens"]
+
+# SAFE — returns None if missing
+cache_tokens = api_response["usage"].get("cache_read_input_tokens")
+
+# SAFE with default — returns 0 if missing
+cache_tokens = api_response["usage"].get("cache_read_input_tokens", 0)
+```
+
+**Rule:** when reading API responses, use `.get()` for optional fields and `[]` only for fields that MUST exist (where a loud crash is what you want).
+
+**`.keys()`, `.values()`, `.items()`**
+
+```python
+config = {"model": "claude-opus-4-7", "temperature": 0.7, "max_tokens": 1024}
+
+list(config.keys())      # ["model", "temperature", "max_tokens"]
+list(config.values())    # ["claude-opus-4-7", 0.7, 1024]
+list(config.items())     # [("model", "claude-opus-4-7"), ("temperature", 0.7), ...]
+
+# .items() is what you almost always want — gives you both key AND value:
+for key, value in config.items():
+    print(f"{key} = {value}")
+```
+
+**Dict Comprehensions — Build Dicts on the Fly**
+
+Same shape as list comprehensions, but with `key: value` syntax.
+
+```python
+# Basic — square each number
+squared = {n: n**2 for n in range(5)}
+# {0: 0, 1: 1, 2: 4, 3: 9, 4: 16}
+
+# Filter a dict — keep only enabled models
+active_models = {"opus": True, "sonnet": True, "haiku": False}
+enabled = {k: v for k, v in active_models.items() if v}
+# {"opus": True, "sonnet": True}
+
+# Invert a dict (swap keys and values)
+model_codes = {"opus": "O", "sonnet": "S", "haiku": "H"}
+reversed_codes = {v: k for k, v in model_codes.items()}
+# {"O": "opus", "S": "sonnet", "H": "haiku"}
+```
+
+**Merging Dicts — Combining Configs**
+
+```python
+defaults  = {"temperature": 0.7, "max_tokens": 1024}
+overrides = {"temperature": 0.2}
+
+# Python 3.9+ syntax
+final = defaults | overrides
+# {"temperature": 0.2, "max_tokens": 1024}   ← later values win
+
+# ** unpacking (works on any version)
+final = {**defaults, **overrides}
+# Same result
+```
+
+This pattern shows up constantly when building API call configs (start with defaults, override per-call).
+
+---
+
+#### 3. Sets — Unique, Unordered, Lightning-Fast Lookups
+
+Sets answer two questions fast: "does X exist in this collection?" and "what's unique here?"
+
+```python
+# Creating sets
+skills = {"Python", "FastAPI", "LangChain"}
+empty = set()    # NOT {} — that's an empty dict!
+
+# Adding / removing
+skills.add("RAG")
+skills.discard("Java")    # remove if present, no error if missing
+skills.remove("Java")     # KeyError if missing — be careful
+```
+
+**Why sets matter for AI work — deduplication:**
+
+```python
+# A RAG retriever often surfaces overlapping chunks
+chunks = ["Paris is the capital", "Paris is the capital", "France is in Europe"]
+
+unique_chunks = list(set(chunks))
+# ["Paris is the capital", "France is in Europe"]
+```
+
+**Set Operations — Compare Two Collections**
+
+```python
+required_skills = {"Python", "SQL", "LangChain", "FastAPI"}
+my_skills       = {"Python", "Power Platform", "SQL", "GitHub Actions"}
+
+# UNION — everything in either set
+required_skills | my_skills
+# {"Python", "SQL", "LangChain", "FastAPI", "Power Platform", "GitHub Actions"}
+
+# INTERSECTION — what's in BOTH (skills I already have)
+required_skills & my_skills
+# {"Python", "SQL"}
+
+# DIFFERENCE — in first but NOT in second (skills I still need)
+required_skills - my_skills
+# {"LangChain", "FastAPI"}
+
+# SYMMETRIC DIFFERENCE — in either but NOT both
+required_skills ^ my_skills
+# {"LangChain", "FastAPI", "Power Platform", "GitHub Actions"}
+```
+
+**AI use case — find shared keywords across documents:**
+```python
+doc1_keywords = {"transformer", "attention", "embedding", "model"}
+doc2_keywords = {"attention", "model", "fine-tuning", "lora"}
+
+shared = doc1_keywords & doc2_keywords
+# {"attention", "model"} — these documents are topically related
+```
+
+> 💡 Sets check membership in O(1) — basically instant. Lists check in O(n) — slow on big lists. If you're doing `if x in big_collection:` repeatedly, convert to a set first.
+
+---
+
+#### 4. Tuples — Lightweight, Immutable, Great for Returning Multiple Values
+
+Tuples are like lists but cannot be changed. Use them when data has fixed structure.
+
+**Creation and unpacking:**
+
+```python
+# Creation
+coords = (28.6139, 77.2090)
+single = (42,)    # ⚠️ Trailing comma — without it, it's just an int
+
+# Unpacking — common Python pattern
+lat, lon = coords
+print(f"Lat: {lat}, Lon: {lon}")
+
+# Functions can return multiple values via tuples
+def analyze_response(text):
+    word_count = len(text.split())
+    char_count = len(text)
+    return word_count, char_count    # returns a tuple
+
+words, chars = analyze_response("hello world from claude")
+# words = 4, chars = 23
+```
+
+**Swapping variables — Python's coolest one-liner:**
+```python
+a, b = 1, 2
+a, b = b, a    # Now a=2, b=1
+```
+
+**The `*` rest pattern:**
+```python
+first, *middle, last = [1, 2, 3, 4, 5]
+# first=1, middle=[2, 3, 4], last=5
+
+# AI use case — split system prompt from rest of conversation
+system_prompt, *user_messages = full_conversation
+```
+
+**Named Tuples — Tuples with Field Names**
+
+Plain tuples are great until you forget what `result[0]` and `result[2]` mean. Named tuples fix this.
+
+```python
+from collections import namedtuple
+
+# Define the shape ONCE
+SearchResult = namedtuple("SearchResult", ["doc_id", "score", "text"])
+
+# Create instances
+r1 = SearchResult(doc_id="d_42", score=0.91, text="Paris is the capital...")
+r2 = SearchResult("d_17", 0.78, "France borders Spain...")
+
+# Access by name (clear!) OR by index (still works)
+r1.score          # 0.91
+r1.text           # "Paris is the capital..."
+r1[0]             # "d_42"
+
+# Still immutable
+# r1.score = 0.5   # ERROR — can't modify
+```
+
+When to use what:
+- **dict** — keys are dynamic / unknown ahead of time, OR you want to mutate fields
+- **namedtuple** — small, fixed shape, immutable, want clean attribute access
+- **tuple** (plain) — truly throwaway / 2-3 values where field names don't help
+
+> 🤔 If you find yourself reaching for namedtuples often, look up `dataclasses` (Day 5 territory). Same idea but with defaults, type hints, and methods.
+
+---
+
+#### Day 3 Experiment — Employee Data Analysis
+
+This is structured the same way you'll process API logs, RAG retrievals, or any tabular AI data. Same patterns, different domain.
+
+```python
+# day3_employees.py
+
+employees = [
+    {"name": "Ravi",    "dept": "Engineering", "salary": 800000},
+    {"name": "Priya",   "dept": "Marketing",   "salary": 600000},
+    {"name": "Arjun",   "dept": "Engineering", "salary": 950000},
+    {"name": "Sneha",   "dept": "HR",          "salary": 550000},
+    {"name": "Vikram",  "dept": "Engineering", "salary": 720000},
+    {"name": "Meera",   "dept": "Marketing",   "salary": 680000},
+    {"name": "Karthik", "dept": "HR",          "salary": 500000},
+]
+
+
+# 1. Group employees by department
+def group_by_department(emps):
+    """Return a dict mapping department -> list of employee names."""
+    grouped = {}
+    for emp in emps:
+        # setdefault: if key missing, create with []; either way return the list
+        grouped.setdefault(emp["dept"], []).append(emp["name"])
+    return grouped
+
+# Output: {"Engineering": ["Ravi", "Arjun", "Vikram"], "Marketing": [...], "HR": [...]}
+
+
+# 2. Find the highest paid employee
+def highest_paid(emps):
+    """Return the dict of the highest-paid employee."""
+    return max(emps, key=lambda e: e["salary"])
+
+# max() with key= — compare items by salary, return the whole dict
+# Output: {"name": "Arjun", "dept": "Engineering", "salary": 950000}
+
+
+# 3. Calculate average salary per department
+def avg_salary_by_department(emps):
+    """Return a dict mapping department -> average salary (rounded)."""
+    by_dept = {}
+    for emp in emps:
+        by_dept.setdefault(emp["dept"], []).append(emp["salary"])
+
+    # Dict comprehension — turn list of salaries into average
+    return {dept: round(sum(salaries) / len(salaries), 2)
+            for dept, salaries in by_dept.items()}
+
+# Output: {"Engineering": 823333.33, "Marketing": 640000.0, "HR": 525000.0}
+
+
+# 4. Filter employees with salary > 700000
+def high_earners(emps, threshold=700000):
+    """Return a list of employees earning more than the threshold."""
+    return [e for e in emps if e["salary"] > threshold]
+
+# Output: [{"name": "Ravi", ...}, {"name": "Arjun", ...}, {"name": "Vikram", ...}]
+
+
+if __name__ == "__main__":
+    print("By department:    ", group_by_department(employees))
+    print("Highest paid:     ", highest_paid(employees))
+    print("Average per dept: ", avg_salary_by_department(employees))
+    print("High earners:     ", high_earners(employees))
+```
+
+**What this teaches you that maps directly to AI work:**
+
+| Function | Pattern | AI engineering parallel |
+|---|---|---|
+| `group_by_department` | Group records by a field | Group messages by user, group retrievals by source doc |
+| `highest_paid` | Find max by a custom key | Find highest-confidence retrieval, longest message in a batch |
+| `avg_salary_by_department` | Group + aggregate | Average tokens per model, average latency per endpoint |
+| `high_earners` | Filter by threshold | Filter retrievals by score (e.g., score > 0.75) |
+
+#### Bonus Challenges (AI-themed)
+
+Same patterns, real LLM scenario. If you can knock these out, you've got the data-shuffling foundation for any LLM application.
+
+```python
+api_calls = [
+    {"model": "claude-opus-4-7",   "tokens": 1200, "cost": 0.018,  "user": "alice"},
+    {"model": "claude-sonnet-4-6", "tokens": 800,  "cost": 0.004,  "user": "bob"},
+    {"model": "claude-opus-4-7",   "tokens": 2500, "cost": 0.038,  "user": "alice"},
+    {"model": "claude-haiku-4-5",  "tokens": 500,  "cost": 0.0005, "user": "carol"},
+    {"model": "claude-sonnet-4-6", "tokens": 1100, "cost": 0.0055, "user": "alice"},
+]
+
+# 1. Group calls by model — which models are most used?
+# 2. Find the most expensive single call
+# 3. Calculate total cost per user
+# 4. Filter calls with > 1000 tokens (candidates for prompt caching)
+# 5. Get the SET of unique users (using set())
+# 6. Return (most_used_model, its_call_count) as a tuple
+```
+
+---
+
+#### Day 3 Cheat Sheet
+
+```python
+# LIST
+items[1:4]                          # slice — index 1 to 3
+items[::-1]                         # reversed
+items.append(x)                     # add ONE item
+items.extend(other)                 # merge two lists
+sorted(items, key=lambda x: x.score, reverse=True)
+[x for x in items if x > 5]         # filter
+[x*2 for x in items]                # transform
+
+# DICT
+d.get("key", default)               # safe access
+for k, v in d.items(): ...          # standard iteration
+{k: v for k, v in d.items() if v}   # dict comprehension
+{**d1, **d2}                        # merge
+
+# SET
+a | b                               # union
+a & b                               # intersection
+a - b                               # difference
+list(set(items))                    # dedupe a list
+
+# TUPLE
+lat, lon = coords                   # unpack
+first, *rest = items                # rest pattern
+from collections import namedtuple
+Point = namedtuple("Point", ["x", "y"])
+```
+
+---
