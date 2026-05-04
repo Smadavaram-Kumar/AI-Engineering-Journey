@@ -1,0 +1,7 @@
+Day 1: Set up Python, VS Code, Git, and GitHub.
+Day 2: Learned about functions, modules, and how to organize code.
+Day 3: Deep dive into lists, dicts, sets, and tuples.
+Day 4: File handling and error handling — the foundation of real apps.
+Day 5: Object-Oriented Programming with classes and objects.
+Day 6: Working with requests and dotenv for API calls.
+Day 7: Pandas and Matplotlib for data analysis.
