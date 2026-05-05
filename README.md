@@ -4250,3 +4250,2838 @@ Point = namedtuple("Point", ["x", "y"])
 ```
 
 ---
+
+
+
+
+# Day 4 — File Handling & Error Handling
+
+> **Goal:** Master reading/writing files (text, CSV, JSON, JSONL), understand encoding, and gracefully handle errors. This is the foundation for every real AI application — loading prompts, saving conversation history, parsing API responses, processing datasets, and surviving when the network dies mid-call.
+
+---
+
+## 📋 Table of Contents
+
+- [Why This Matters for AI Engineers](#why-this-matters-for-ai-engineers)
+- [Part 1: File Handling — The Foundation](#part-1-file-handling--the-foundation)
+  - [1.1 Opening Files — `open()` and Modes](#11-opening-files--open-and-modes)
+  - [1.2 The `with` Statement — Why You Should ALWAYS Use It](#12-the-with-statement--why-you-should-always-use-it)
+  - [1.3 Reading Files — Four Different Methods](#13-reading-files--four-different-methods)
+  - [1.4 Writing Files](#14-writing-files)
+  - [1.5 File Paths — Relative vs Absolute, and `pathlib`](#15-file-paths--relative-vs-absolute-and-pathlib)
+  - [1.6 Encoding — UTF-8 and Why It Matters for AI](#16-encoding--utf-8-and-why-it-matters-for-ai)
+- [Part 2: CSV Files — Working with Tabular Data](#part-2-csv-files--working-with-tabular-data)
+  - [2.1 What is CSV?](#21-what-is-csv)
+  - [2.2 Manual Reading (and Why It Breaks)](#22-manual-reading-and-why-it-breaks)
+  - [2.3 The `csv` Module — Basic Usage](#23-the-csv-module--basic-usage)
+  - [2.4 `csv.DictReader` and `csv.DictWriter` — The Preferred Way](#24-csvdictreader-and-csvdictwriter--the-preferred-way)
+  - [2.5 Common CSV Gotchas — Deep Dive](#25-common-csv-gotchas--deep-dive)
+  - [2.6 When to Stop Using `csv` and Use `pandas`](#26-when-to-stop-using-csv-and-use-pandas)
+- [Part 3: JSON — The Language of APIs](#part-3-json--the-language-of-apis)
+  - [3.1 Why JSON is THE Format for AI Engineers](#31-why-json-is-the-format-for-ai-engineers)
+  - [3.2 Reading JSON — `json.load()` vs `json.loads()`](#32-reading-json--jsonload-vs-jsonloads)
+  - [3.3 Writing JSON](#33-writing-json)
+  - [3.4 Python ↔ JSON Type Mapping](#34-python--json-type-mapping)
+  - [3.5 JSONL — JSON Lines (Critical for AI)](#35-jsonl--json-lines-critical-for-ai)
+  - [3.6 Real Example — Parsing a Claude API Response](#36-real-example--parsing-a-claude-api-response)
+- [Part 4: Error Handling — Code That Doesn't Crash](#part-4-error-handling--code-that-doesnt-crash)
+  - [4.1 Why Errors Matter (Especially for AI Apps)](#41-why-errors-matter-especially-for-ai-apps)
+  - [4.2 Anatomy of an Error (the Traceback)](#42-anatomy-of-an-error-the-traceback)
+  - [4.3 `try / except` — The Basics](#43-try--except--the-basics)
+  - [4.4 The `as e` Trap — Class vs Instance](#44-the-as-e-trap--class-vs-instance)
+  - [4.5 Catching Specific Exceptions](#45-catching-specific-exceptions)
+  - [4.6 Multiple `except` Blocks](#46-multiple-except-blocks)
+  - [4.7 The `else` Clause](#47-the-else-clause)
+  - [4.8 The `finally` Clause](#48-the-finally-clause)
+  - [4.9 Full Picture — `try / except / else / finally`](#49-full-picture--try--except--else--finally)
+  - [4.10 `raise` — Throwing Your Own Errors](#410-raise--throwing-your-own-errors)
+  - [4.11 Custom Exception Classes](#411-custom-exception-classes)
+  - [4.12 Common Built-in Exceptions Cheat Sheet](#412-common-built-in-exceptions-cheat-sheet)
+  - [4.13 Real-World AI Pattern — Retry With Backoff](#413-real-world-ai-pattern--retry-with-backoff)
+- [Day 4 Experiment — Mini Conversation Logger](#day-4-experiment--mini-conversation-logger)
+- [Common Pitfalls I Hit](#common-pitfalls-i-hit)
+- [Day 4 Cheat Sheet](#day-4-cheat-sheet)
+
+---
+
+## Why This Matters for AI Engineers
+
+Every real AI app you'll build does these things constantly:
+
+| What an AI app does | What you need from Day 4 |
+|---|---|
+| Load a prompt template from `prompt.txt` | File reading |
+| Save conversation history between sessions | JSON write |
+| Read a dataset of customer support tickets | CSV reading |
+| Parse the response from `claude.messages.create()` | JSON parsing |
+| Save fine-tuning data in JSONL format | JSONL write |
+| Retry when the API rate-limits you | Error handling |
+| Survive when a user uploads a corrupt file | Error handling |
+| Log every API call for debugging | File append + JSON |
+| Read API keys from a `.env` file | File reading |
+| Cache expensive API responses to disk | JSON read/write |
+
+> If you can't handle files and errors, you can't build AI apps. You can only build demos. The gap between a demo and a product is 80% error handling.
+
+---
+
+## Part 1: File Handling — The Foundation
+
+### 1.1 Opening Files — `open()` and Modes
+
+The `open()` function is how Python talks to files on your disk.
+
+```python
+file = open("notes.txt", "r")     # open for reading
+content = file.read()              # read everything
+file.close()                       # ALWAYS close it
+```
+
+The second argument is the **mode** — it tells Python what you want to do with the file.
+
+| Mode | Meaning | If file doesn't exist | If file exists |
+|---|---|---|---|
+| `"r"` | Read (default) | ❌ Crashes (`FileNotFoundError`) | Opens for reading |
+| `"w"` | Write | ✅ Creates new | ⚠️ **Overwrites everything** |
+| `"a"` | Append | ✅ Creates new | Adds to end (safe) |
+| `"x"` | Exclusive create | ✅ Creates new | ❌ Crashes (`FileExistsError`) |
+| `"r+"` | Read + Write | ❌ Crashes | Opens for both |
+| `"rb"` / `"wb"` | Binary read/write | — | For images, PDFs, audio |
+| `"rt"` / `"wt"` | Text mode (default) | — | Same as `r` / `w` |
+
+> ⚠️ **The `"w"` trap:** Opening a file in `"w"` mode **deletes its contents instantly** — even before you write anything. If you want to keep what's there, use `"a"` (append).
+
+**Real AI engineering examples:**
+
+```python
+# Loading a system prompt
+open("system_prompt.txt", "r")              # text → "r"
+
+# Reading a PDF for RAG
+open("research_paper.pdf", "rb")            # PDF is binary → "rb"
+
+# Logging every API call
+open("api_calls.log", "a")                  # append, never overwrite → "a"
+
+# Saving an image generated by an AI model
+open("generated_image.png", "wb")           # image is binary → "wb"
+```
+
+### 1.2 The `with` Statement — Why You Should ALWAYS Use It
+
+The manual approach has a fatal flaw:
+
+```python
+# ❌ THE WRONG WAY
+file = open("notes.txt", "r")
+content = file.read()
+# ... what if an error happens here? ...
+file.close()    # Never reached → file stays open → memory leak
+```
+
+The `with` statement (called a **context manager**) auto-closes the file even if your code crashes:
+
+```python
+# ✅ THE RIGHT WAY
+with open("notes.txt", "r") as file:
+    content = file.read()
+# File is automatically closed here, GUARANTEED.
+# Even if read() crashes, the file still gets closed.
+```
+
+**Analogy:** `with` is like a self-closing door. You walk in, do your work, walk out — and the door closes itself behind you. Without `with`, you have to remember to close the door, and if you trip on the way out, the door stays open forever.
+
+> **Rule:** From this day forward, every time you open a file, use `with`. No exceptions.
+
+### 1.3 Reading Files — Four Different Methods
+
+```python
+# Method 1: read() — entire file as ONE string
+with open("notes.txt", "r") as f:
+    content = f.read()
+    print(content)
+# Use when: file is small (< a few MB)
+# Don't use when: file is huge (loads everything into RAM)
+
+# Method 2: readline() — ONE line at a time
+with open("notes.txt", "r") as f:
+    first_line = f.readline()    # gets line 1
+    second_line = f.readline()   # gets line 2
+# Use when: you need precise control
+
+# Method 3: readlines() — ALL lines as a LIST
+with open("notes.txt", "r") as f:
+    lines = f.readlines()
+    # ['First line\n', 'Second line\n', 'Third line\n']
+# Use when: you need to access lines by index
+
+# Method 4: Iteration — line-by-line, MEMORY EFFICIENT (best for big files)
+with open("huge_dataset.txt", "r") as f:
+    for line in f:
+        process(line.strip())   # .strip() removes \n at the end
+# Use when: file is large (millions of lines)
+# This is THE method AI engineers use for datasets.
+```
+
+> 💡 **`.strip()` is your friend.** Each line read from a file ends with `\n` (newline character). Use `line.strip()` to remove it. Otherwise `"hello\n" == "hello"` is `False` and you'll waste hours debugging.
+
+**Test file — create `notes.txt` with this content:**
+
+```
+Day 1: Set up Python, VS Code, Git, and GitHub.
+Day 2: Learned about functions, modules, and how to organize code.
+Day 3: Deep dive into lists, dicts, sets, and tuples.
+Day 4: File handling and error handling — the foundation of real apps.
+Day 5: Object-Oriented Programming with classes and objects.
+Day 6: Working with requests and dotenv for API calls.
+Day 7: Pandas and Matplotlib for data analysis.
+```
+
+Then run a small test script that exercises all four methods:
+
+```python
+# test_file_reading.py
+print("=== Method 1: read() ===")
+with open("notes.txt", "r", encoding="utf-8") as f:
+    print(f.read())
+
+print("=== Method 3: readlines() ===")
+with open("notes.txt", "r", encoding="utf-8") as f:
+    for i, line in enumerate(f.readlines(), 1):
+        print(f"{i}. {line.strip()}")
+
+print("=== Method 4: Iteration (search for keyword) ===")
+with open("notes.txt", "r", encoding="utf-8") as f:
+    for line in f:
+        if "Pandas" in line:
+            print(f"Found: {line.strip()}")
+
+print("=== Bonus: Why .strip() matters ===")
+with open("notes.txt", "r", encoding="utf-8") as f:
+    raw = f.readline()
+    print(f"Without strip: {repr(raw)}")        # shows the \n
+    print(f"With strip:    {repr(raw.strip())}")  # \n removed
+```
+
+### 1.4 Writing Files
+
+```python
+# Single string
+with open("output.txt", "w") as f:
+    f.write("Hello, AI world!\n")
+    f.write("Line 2\n")            # \n = newline (you must add it manually)
+
+# Multiple lines from a list
+lines = ["Apple\n", "Banana\n", "Cherry\n"]
+with open("fruits.txt", "w") as f:
+    f.writelines(lines)            # writes them all in order
+
+# Appending (won't overwrite existing content)
+with open("log.txt", "a") as f:
+    f.write("New log entry\n")
+```
+
+> ⚠️ **`write()` does NOT add newlines automatically.** If you forget `\n`, your output becomes one giant line: `"HelloLine 2"` instead of two separate lines.
+
+### 1.5 File Paths — Relative vs Absolute, and `pathlib`
+
+```python
+# Relative path — starts where your script is running
+open("data.txt")               # same folder as script
+open("data/notes.txt")         # subfolder
+open("../other/file.txt")      # parent folder, then "other" subfolder
+
+# Absolute path — full address from the drive root
+open("C:/Users/smadavaram/Desktop/data.txt")        # ✅ forward slashes work
+open(r"C:\Users\smadavaram\Desktop\data.txt")       # ✅ "raw string" with r prefix
+open("C:\Users\smadavaram\Desktop\data.txt")        # ❌ \U is interpreted as escape!
+```
+
+> ⚠️ **Windows backslash trap:** `"\n"` is newline, `"\t"` is tab, `"\U..."` is a Unicode escape. So `"C:\Users\..."` can break in surprising ways. Either use forward slashes (`/`) or prefix with `r"..."` (raw string).
+
+**Modern way: `pathlib`** (recommended for new code):
+
+```python
+from pathlib import Path
+
+# Build paths cleanly — no slash confusion, works on Windows AND Mac/Linux
+project = Path("C:/Users/smadavaram/AI-Engineering-Journey")
+data_file = project / "datasets" / "tickets.csv"   # the / is path join
+
+# Useful pathlib operations:
+data_file.exists()        # True/False — check before opening
+data_file.is_file()       # True if it's a file
+data_file.parent          # the folder containing it
+data_file.name            # "tickets.csv"
+data_file.stem            # "tickets" (no extension)
+data_file.suffix          # ".csv"
+
+# Read and write directly (no `with` needed for one-shot reads):
+text = data_file.read_text(encoding="utf-8")
+data_file.write_text("new content", encoding="utf-8")
+
+# List all CSV files in a folder:
+for csv_file in project.glob("**/*.csv"):    # ** = recursive
+    print(csv_file)
+```
+
+> 💡 **For AI engineering, prefer `pathlib`.** It works the same on Windows, Mac, and Linux — important when you deploy to cloud servers (which run Linux).
+
+### 1.6 Encoding — UTF-8 and Why It Matters for AI
+
+Computers store everything as numbers. **Encoding** is the rule that maps numbers ↔ characters.
+
+```python
+# Always specify encoding="utf-8" for AI work
+with open("data.txt", "r", encoding="utf-8") as f:
+    text = f.read()
+```
+
+**Why this matters for AI:**
+
+| Without `encoding="utf-8"` | With `encoding="utf-8"` |
+|---|---|
+| Crashes on emojis 😀 | Works fine |
+| Crashes on Hindi (नमस्ते), Chinese (你好), Arabic (مرحبا) | Works fine |
+| Crashes on smart quotes `"like these"` (common in AI outputs) | Works fine |
+| Default on Windows is `cp1252`, on Mac/Linux is `utf-8` → same code breaks across machines | Same behavior everywhere |
+
+> ⚠️ **Always pass `encoding="utf-8"` explicitly.** Claude, GPT, Gemini all output Unicode (emojis, smart quotes, non-English). If you don't specify UTF-8, your code will work on your laptop and crash in production.
+
+```python
+# THIS is the AI engineer's default file open:
+with open("anything.txt", "r", encoding="utf-8") as f:
+    ...
+```
+
+---
+
+## Part 2: CSV Files — Working with Tabular Data
+
+### 2.1 What is CSV?
+
+**CSV = Comma-Separated Values.** It's a plain text file where each line is a row, and commas separate columns. It's the universal format for spreadsheet-like data.
+
+```
+name,age,role
+Smadavaram,25,Power Platform Developer
+Anita,30,Data Scientist
+Raj,28,AI Engineer
+```
+
+**Where AI engineers see CSV every day:**
+- Customer support tickets (input for classification models)
+- Evaluation datasets ("here are 100 questions, run them through Claude, measure accuracy")
+- Exported logs from analytics tools
+- Training data for fine-tuning
+- Output from `pandas` (Day 7)
+
+### 2.2 Manual Reading (and Why It Breaks)
+
+A beginner's first instinct:
+
+```python
+# ❌ THE NAIVE APPROACH — works for simple files, breaks for real ones
+with open("people.csv", "r", encoding="utf-8") as f:
+    for line in f:
+        fields = line.strip().split(",")
+        print(fields)
+```
+
+**Why it breaks — commas inside values:**
+
+Imagine you have this data and want to save it:
+
+| name | quote | age |
+|---|---|---|
+| Smadavaram | Hello, world! | 25 |
+
+Notice `Hello, world!` already has a comma in it. The CSV standard rule is: **wrap any value containing a comma in double quotes.** So the file looks like:
+
+```
+name,quote,age
+Smadavaram,"Hello, world!",25
+```
+
+A human reads this as 3 fields: `Smadavaram`, `Hello, world!`, `25`.
+
+But Python's `.split(",")` doesn't understand the quote-wrapping rule. It just blindly splits on every comma:
+
+```python
+line = 'Smadavaram,"Hello, world!",25'
+fields = line.split(",")
+print(fields)
+# ['Smadavaram', '"Hello', ' world!"', '25']
+#  ↑              ↑          ↑          ↑
+#  field 1      WRONG     WRONG      field 3
+```
+
+You expected **3 fields**. You got **4**. The "Hello, world!" got ripped in half by the comma inside it.
+
+> **The line has 3 commas total — 2 are real separators, 1 is part of the data.** `.split(",")` can't tell them apart. The `csv` module CAN — because it understands the quote-wrapping rule.
+
+**See it side by side:**
+
+```python
+import csv
+
+content = '''name,quote,age
+Smadavaram,"Hello, world!",25
+Anita,"She said ""hi"" to me",30
+Raj,Plain text,28
+'''
+with open("tricky.csv", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("=== Manual split (BROKEN) ===")
+with open("tricky.csv", "r", encoding="utf-8") as f:
+    next(f)  # skip header
+    for line in f:
+        fields = line.strip().split(",")
+        print(f"Got {len(fields)} fields: {fields}")
+
+print("\n=== csv module (CORRECT) ===")
+with open("tricky.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.reader(f)
+    next(reader)  # skip header
+    for row in reader:
+        print(f"Got {len(row)} fields: {row}")
+```
+
+Output:
+```
+=== Manual split (BROKEN) ===
+Got 4 fields: ['Smadavaram', '"Hello', ' world!"', '25']
+Got 5 fields: ['Anita', '"She said ""hi"" to me"', '30']
+Got 3 fields: ['Raj', 'Plain text', '28']
+
+=== csv module (CORRECT) ===
+Got 3 fields: ['Smadavaram', 'Hello, world!', '25']
+Got 3 fields: ['Anita', 'She said "hi" to me', '30']
+Got 3 fields: ['Raj', 'Plain text', '28']
+```
+
+> **Rule:** Never parse CSV by hand. Use the `csv` module (or `pandas` for big jobs).
+
+### 2.3 The `csv` Module — Basic Usage
+
+```python
+import csv
+
+# Reading
+with open("people.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.reader(f)
+    for row in reader:
+        print(row)
+# Each row is a LIST of strings: ['Smadavaram', 'Hello, world!', '25']
+
+# Writing
+rows = [
+    ["name", "age", "role"],
+    ["Smadavaram", 25, "AI Engineer"],
+    ["Anita", 30, "Data Scientist"],
+]
+with open("output.csv", "w", encoding="utf-8", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows(rows)        # writes all rows at once
+    # Or: writer.writerow(["one", "row", "at", "a", "time"])
+```
+
+#### What `newline=""` actually does
+
+Different operating systems use different end-of-line characters:
+
+| OS | End-of-line | Looks like |
+|---|---|---|
+| Windows | `\r\n` | 2 characters |
+| Mac/Linux | `\n` | 1 character |
+
+By default, Python text-mode files do "universal newlines translation" — when writing, every `\n` you write becomes `\r\n` on Windows. The `csv` module ALSO writes `\r\n` itself. Result: **double conversion** → `\r\r\n` → blank rows when Excel opens the file.
+
+`newline=""` tells Python: **"Don't touch the line endings. Let the csv module handle them."**
+
+> **Don't memorize the why. Memorize the rule:** Always pass `newline=""` when opening CSV files — both for reading and writing.
+
+### 2.4 `csv.DictReader` and `csv.DictWriter` — The Preferred Way
+
+Working with column names instead of indices is much more readable:
+
+```python
+import csv
+
+# Reading as dictionaries — each row becomes a dict using the header as keys
+with open("people.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(row["name"], row["age"])    # access by column name!
+        # row is: {"name": "Smadavaram", "age": "25", "role": "..."}
+```
+
+> ⚠️ Notice `row["age"]` is the **string** `"25"`, not the integer `25`. CSVs don't store types. You must convert: `int(row["age"])`.
+
+```python
+# Writing dictionaries to CSV
+data = [
+    {"name": "Smadavaram", "age": 25, "role": "AI Engineer"},
+    {"name": "Anita",      "age": 30, "role": "Data Scientist"},
+]
+
+with open("output.csv", "w", encoding="utf-8", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["name", "age", "role"])
+    writer.writeheader()                  # writes the column names
+    writer.writerows(data)                # writes all dicts as rows
+```
+
+### 2.5 Common CSV Gotchas — Deep Dive
+
+#### Gotcha 1: Different Delimiter (semicolons, tabs, pipes)
+
+In many European countries, the comma `,` is used as the **decimal point** in numbers ("3,14" means π in Germany, France, Spain). To avoid confusion, those countries use `;` as the field separator.
+
+```python
+import csv
+
+content = """name;price;quantity
+Apple;1,50;10
+Banana;0,75;20"""
+
+with open("european.csv", "w", encoding="utf-8") as f:
+    f.write(content)
+
+# Without delimiter — WRONG
+with open("european.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.reader(f)
+    for row in reader:
+        print(row)
+# ['name;price;quantity']            ← whole line as one field!
+# ['Apple;1', '50;10']               ← split at the wrong comma
+
+# With delimiter=";" — CORRECT
+with open("european.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.reader(f, delimiter=";")    # ← tell csv to split on ;
+    for row in reader:
+        print(row)
+# ['name', 'price', 'quantity']
+# ['Apple', '1,50', '10']
+# ['Banana', '0,75', '20']
+```
+
+| File type | Delimiter | Code |
+|---|---|---|
+| Standard CSV | comma | `csv.reader(f)` (default) |
+| European CSV | semicolon | `csv.reader(f, delimiter=";")` |
+| TSV (Tab-Separated) | tab | `csv.reader(f, delimiter="\t")` |
+| Pipe-separated | pipe | `csv.reader(f, delimiter="|")` |
+
+> 💡 TSV is very common in AI/ML datasets. Hugging Face datasets, log files, and many scientific datasets use tab separators.
+
+#### Gotcha 2: First Row is NOT the Header
+
+Some CSVs are pure data — no header row.
+
+```
+Smadavaram,25,AI Engineer
+Anita,30,Data Scientist
+```
+
+If you use `DictReader` on this, it mistakenly treats the FIRST DATA ROW as column names:
+
+```python
+# WRONG — DictReader assumes first row is header
+with open("noheader.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(row)
+# {'Smadavaram': 'Anita', '25': '30', 'AI Engineer': 'Data Scientist'}
+# We lost Smadavaram entirely!
+```
+
+**Two solutions:**
+
+```python
+# Solution A: Use csv.reader and access by index
+with open("noheader.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.reader(f)
+    for row in reader:
+        name, age, role = row[0], row[1], row[2]
+        print(f"{name} is a {role}")
+
+# Solution B: Use DictReader and PROVIDE your own field names
+with open("noheader.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f, fieldnames=["name", "age", "role"])
+    for row in reader:
+        print(f"{row['name']} is a {row['role']}")
+```
+
+#### Gotcha 3: Rows With Missing Values
+
+Real-world CSVs are messy:
+
+```csv
+name,age,salary
+Smadavaram,25,1500000
+Anita,30,
+Raj,,800000
+```
+
+Empty values come back as empty strings `""` (not `None`):
+
+```python
+with open("messy.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(row)
+# {'name': 'Smadavaram', 'age': '25', 'salary': '1500000'}
+# {'name': 'Anita',      'age': '30', 'salary': ''}     ← empty string!
+# {'name': 'Raj',        'age': '',   'salary': '800000'}
+```
+
+Trying to convert an empty string crashes:
+
+```python
+salary = int(row["salary"])     # ❌ ValueError on Anita's row!
+```
+
+**Solutions:**
+
+```python
+# Pattern 1: "value or default" — handles empty strings
+salary_str = row["salary"] or "0"   # if "", use "0"
+salary = int(salary_str)
+
+# Pattern 2: .get() — handles missing KEYS (different from missing values!)
+salary = row.get("salary", "0")     # if column doesn't exist, default to "0"
+
+# Combined — handles both missing key AND empty value:
+salary = int(row.get("salary", "") or "0")
+```
+
+> **Key idea:** With messy real-world data, you ALWAYS need a strategy for "what if this is missing?" Decide a default (zero, "Unknown", None, or skip the row) for every column you read.
+
+#### Gotcha 4: Huge Files — Don't Load Everything Into Memory
+
+If your CSV has 10 million rows, you cannot load it all at once.
+
+```python
+# ❌ DANGEROUS — loads ALL rows into a list
+with open("huge_dataset.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    all_rows = list(reader)        # 5 GB file → 5+ GB of RAM → crash
+```
+
+**Fix — process one row at a time (streaming):**
+
+```python
+# ✅ SAFE — only ONE row in memory at any moment
+with open("huge_dataset.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        process(row)
+        # row is garbage-collected after this iteration
+```
+
+**Real example — count tickets by category:**
+
+```python
+import csv
+from collections import Counter
+
+counter = Counter()
+with open("support_tickets.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        counter[row["category"]] += 1
+
+print(counter.most_common(10))
+# Memory used: a few KB. Works on any file size.
+```
+
+#### Other CSV Encoding Quirks
+
+| Problem | Solution |
+|---|---|
+| Excel saved CSV with weird BOM | Try `encoding="utf-8-sig"` |
+| File looks fine but breaks | Check delimiter (might be `;` or `\t`) |
+| Numbers come out as strings | Convert: `int(row["age"])`, `float(row["price"])` |
+
+### 2.6 When to Stop Using `csv` and Use `pandas`
+
+The `csv` module is great for simple line-by-line work. But for **analyzing** large data — filtering, computing statistics, joining tables — you'll switch to `pandas` (Day 7).
+
+Here's the example, walked through line by line:
+
+```python
+import pandas as pd
+df = pd.read_csv("people.csv")
+print(df[df["age"] > 25])
+```
+
+#### Line 1 — `import pandas as pd`
+
+`pandas` is a Python library (install with `pip install pandas`). The `as pd` part means "from now on, call it `pd`" — a shorter alias. Every Python data scientist writes `pd`. It's a convention.
+
+#### Line 2 — `df = pd.read_csv("people.csv")`
+
+Reads a CSV file and returns a **DataFrame** — pandas's main data structure. A DataFrame is an in-memory table, like an Excel sheet.
+
+If `people.csv` is:
+```csv
+name,age,role
+Smadavaram,25,Power Platform Developer
+Anita,30,Data Scientist
+Raj,28,AI Engineer
+Lina,22,Intern
+Mark,35,Engineering Manager
+```
+
+Then `df` holds it as:
+```
+         name  age                       role
+0  Smadavaram   25  Power Platform Developer
+1       Anita   30            Data Scientist
+2         Raj   28               AI Engineer
+3        Lina   22                    Intern
+4        Mark   35      Engineering Manager
+```
+
+The `0, 1, 2, 3, 4` on the left are pandas's auto-generated row index.
+
+#### Line 3 — `print(df[df["age"] > 25])` — the filtering magic
+
+This is doing **two steps at once**:
+
+**Step A: `df["age"] > 25` — comparison on the WHOLE column**
+
+`df["age"]` selects just the age column:
+```
+0    25
+1    30
+2    28
+3    22
+4    35
+```
+
+`df["age"] > 25` applies the comparison to every row at once (called **vectorized operations**). The result is a column of True/False values:
+```
+0    False    ← 25 is NOT > 25
+1    True     ← 30 > 25
+2    True     ← 28 > 25
+3    False    ← 22 is NOT > 25
+4    True     ← 35 > 25
+```
+
+This True/False column is called a **boolean mask**.
+
+**Step B: `df[mask]` — keep only rows where mask is True**
+
+When you put a boolean mask inside `df[...]`, pandas returns only the rows where the mask is True:
+
+```
+         name  age                  role
+1       Anita   30        Data Scientist
+2         Raj   28           AI Engineer
+4        Mark   35   Engineering Manager
+```
+
+(Smadavaram and Lina are gone — their ages weren't greater than 25.)
+
+The line `df[df["age"] > 25]` smashes both steps into one — the idiomatic pandas way.
+
+#### Side-by-side comparison
+
+Same task: "Average age per role, sorted by average age."
+
+**With `csv` module:**
+```python
+import csv
+from collections import defaultdict
+
+ages_by_role = defaultdict(list)
+with open("people.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        ages_by_role[row["role"]].append(int(row["age"]))
+
+averages = {role: sum(ages)/len(ages) for role, ages in ages_by_role.items()}
+sorted_avgs = sorted(averages.items(), key=lambda x: x[1])
+for role, avg in sorted_avgs:
+    print(f"{role}: {avg:.1f}")
+```
+
+**With `pandas`:**
+```python
+import pandas as pd
+df = pd.read_csv("people.csv")
+print(df.groupby("role")["age"].mean().sort_values())
+```
+
+**One line.** That's why AI engineers reach for pandas the moment data analysis enters the picture.
+
+#### Tool selection
+
+| Situation | Use |
+|---|---|
+| Reading a config file | `json` module |
+| Reading a few rows, simple work, OR streaming a huge file | `csv` module |
+| Analyzing, filtering, aggregating, computing statistics | `pandas` |
+| Building a fine-tuning dataset (line-by-line) | `csv` or write JSONL directly |
+| Loading 10K customer support tickets to analyze with Claude | `pandas` |
+
+---
+
+## Part 3: JSON — The Language of APIs
+
+### 3.1 Why JSON is THE Format for AI Engineers
+
+Every AI API in existence uses JSON. Every single one.
+
+```python
+# When you call Claude:
+response = client.messages.create(...)
+# Behind the scenes, you sent JSON, and you received JSON.
+# Anthropic, OpenAI, Google — they all speak JSON.
+```
+
+**JSON looks identical to a Python dictionary** — that's because Python dicts and JSON were practically made for each other.
+
+```json
+{
+  "model": "claude-sonnet-4-5",
+  "messages": [
+    {"role": "user", "content": "Hello"}
+  ],
+  "max_tokens": 1024,
+  "temperature": 0.7
+}
+```
+
+### 3.2 Reading JSON — `json.load()` vs `json.loads()`
+
+The `json` module has two pairs of functions. The difference is just one letter — `s` for "string."
+
+| Function | Reads from | Returns |
+|---|---|---|
+| `json.load(file)` | a file object | a Python dict/list |
+| `json.loads(text)` | a string | a Python dict/list |
+| `json.dump(obj, file)` | writes to a file | nothing |
+| `json.dumps(obj)` | writes to a string | a string |
+
+> 💡 **Memory trick:** `s` = "string." `loads` = "load string." `dumps` = "dump to string." No `s` = file.
+
+```python
+import json
+
+# Reading from a file
+with open("config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)             # file → Python dict
+    print(config["model"])
+
+# Reading from a string (e.g., API response body as text)
+api_response_text = '{"model": "claude-sonnet-4-5", "tokens": 42}'
+data = json.loads(api_response_text)  # string → Python dict
+print(data["tokens"])                 # 42
+```
+
+### 3.3 Writing JSON
+
+```python
+import json
+
+data = {
+    "name": "Smadavaram",
+    "skills": ["Python", "Power Platform"],
+    "experience_years": 3,
+    "is_learning_ai": True
+}
+
+# Writing to a file
+with open("profile.json", "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+
+# Writing to a string (for logging, sending in HTTP body, etc.)
+text = json.dumps(data, indent=2, ensure_ascii=False)
+print(text)
+```
+
+**Key parameters you'll use constantly:**
+
+| Parameter | What it does |
+|---|---|
+| `indent=2` | Pretty-print with 2-space indentation (much more readable) |
+| `indent=None` (default) | Compact one-liner (smaller file) |
+| `ensure_ascii=False` | Allow non-English characters (नमस्ते, 你好) instead of escaping them |
+| `sort_keys=True` | Sort dictionary keys alphabetically |
+
+> 💡 **AI engineer's default:** `json.dump(data, f, indent=2, ensure_ascii=False)` — readable AND handles Unicode.
+
+### 3.4 Python ↔ JSON Type Mapping
+
+| Python | ←→ | JSON |
+|---|---|---|
+| `dict` | ←→ | object `{...}` |
+| `list`, `tuple` | →  | array `[...]` |
+| `str` | ←→ | string `"..."` |
+| `int`, `float` | ←→ | number |
+| `True` | ←→ | `true` (lowercase!) |
+| `False` | ←→ | `false` |
+| `None` | ←→ | `null` |
+
+**Things that DON'T convert:**
+
+```python
+# ❌ These will crash with TypeError:
+import datetime
+data = {"date": datetime.datetime.now()}    # datetime is not JSON-serializable
+data = {"unique": {1, 2, 3}}                # sets are not JSON-serializable
+data = {"id": b"binary data"}               # bytes are not JSON-serializable
+
+# ✅ Convert them first:
+data = {"date": datetime.datetime.now().isoformat()}    # → string
+data = {"unique": list({1, 2, 3})}                       # → list
+```
+
+### 3.5 JSONL — JSON Lines (Critical for AI)
+
+**JSONL** (also called NDJSON) = **one JSON object per line.**
+
+```jsonl
+{"id": 1, "question": "What is AI?", "answer": "AI is..."}
+{"id": 2, "question": "What is ML?", "answer": "ML is..."}
+{"id": 3, "question": "What is Python?", "answer": "Python is..."}
+```
+
+**Why AI engineers use JSONL constantly:**
+- Anthropic's **batch API** input/output is JSONL
+- OpenAI's **fine-tuning** datasets must be JSONL
+- Hugging Face datasets often distribute as JSONL
+- Streaming logs (one line = one event) are essentially JSONL
+
+**Reading JSONL — line by line, memory-efficient:**
+
+```python
+import json
+
+with open("dataset.jsonl", "r", encoding="utf-8") as f:
+    for line in f:
+        record = json.loads(line)         # parse ONE line at a time
+        print(record["question"])
+# Works on huge files because we never load the whole thing into RAM.
+```
+
+**Writing JSONL:**
+
+```python
+records = [
+    {"id": 1, "question": "What is AI?"},
+    {"id": 2, "question": "What is ML?"},
+]
+
+with open("dataset.jsonl", "w", encoding="utf-8") as f:
+    for record in records:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # ↑ json.dumps (string) + "\n" → one record per line
+```
+
+> 💡 **JSON vs JSONL — the key difference:** Regular JSON loads the entire file into memory. JSONL lets you process gigabyte files line-by-line. For datasets, always JSONL.
+
+### 3.6 Real Example — Parsing a Claude API Response
+
+A Claude API response looks like this:
+
+```python
+response = {
+    "id": "msg_01ABC123",
+    "model": "claude-sonnet-4-5",
+    "content": [
+        {"type": "text", "text": "The answer is 42."}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+        "input_tokens": 12,
+        "output_tokens": 8
+    }
+}
+
+# Extracting what you actually care about:
+answer = response["content"][0]["text"]
+input_tokens = response["usage"]["input_tokens"]
+output_tokens = response["usage"]["output_tokens"]
+
+print(f"Answer: {answer}")
+print(f"Cost: {input_tokens} in + {output_tokens} out tokens")
+```
+
+**Saving the full response for later analysis:**
+
+```python
+import json
+from datetime import datetime
+
+log_entry = {
+    "timestamp": datetime.now().isoformat(),
+    "request": {"prompt": "What's 6 times 7?"},
+    "response": response,
+}
+
+with open("api_log.jsonl", "a", encoding="utf-8") as f:    # append!
+    f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+```
+
+> This is the **exact pattern** you'll use on Day 9 when you make real Claude calls. Logging every API call is non-negotiable for any production AI app — for debugging, cost tracking, and improving prompts.
+
+---
+
+## Part 4: Error Handling — Code That Doesn't Crash
+
+### 4.1 Why Errors Matter (Especially for AI Apps)
+
+Your AI app will fail in dozens of ways you can't control:
+
+| What goes wrong | Why |
+|---|---|
+| `ConnectionError` | User's wifi blinked |
+| `TimeoutError` | Claude API took too long |
+| `RateLimitError` | You hit the API rate limit |
+| `AuthenticationError` | API key is wrong/expired |
+| `JSONDecodeError` | Response was malformed |
+| `FileNotFoundError` | User uploaded a file then deleted it |
+| `KeyError` | API response missing a field you expected |
+| `UnicodeDecodeError` | File has weird encoding |
+
+**A demo crashes when these happen. A product handles them gracefully and either retries, falls back, or shows the user a clean message.**
+
+### 4.2 Anatomy of an Error (the Traceback)
+
+When Python crashes, it shows a **traceback**. Read it from BOTTOM to TOP:
+
+```
+Traceback (most recent call last):
+  File "app.py", line 12, in <module>
+    age = int(input("Age: "))
+ValueError: invalid literal for int() with base 10: 'twenty'
+└─────┬─────┘ └────────────────────┬───────────────────────────┘
+      │                            │
+   Type of error          Human-readable message
+```
+
+The **last line** tells you the error type and message. Always read it. 80% of debugging is reading tracebacks.
+
+### 4.3 `try / except` — The Basics
+
+```python
+try:
+    age = int(input("Enter your age: "))
+    print(f"You are {age} years old")
+except ValueError:
+    print("That's not a valid number!")
+```
+
+**How it reads:** "TRY this code. If a `ValueError` happens, EXCEPT (i.e., handle it) by running the second block."
+
+**Flow:**
+```
+        ┌────────────────┐
+        │  try block     │
+        └────────┬───────┘
+                 │
+           Did an error happen?
+            ┌────┴─────┐
+            │          │
+           No         Yes
+            │          │
+            ▼          ▼
+        Skip       Run the matching
+       except      except block
+            │          │
+            └────┬─────┘
+                 ▼
+         Continue program
+```
+
+### 4.4 The `as e` Trap — Class vs Instance
+
+This trips up everyone. Watch this naive attempt:
+
+```python
+try:
+    val = 1/0
+except Exception:
+    print(Exception)
+```
+
+**Output:**
+```
+<class 'Exception'>
+```
+
+That's not what you wanted. You wanted to see `division by zero`. So what happened?
+
+#### Three different things that look similar
+
+| Thing | What it is | Example |
+|---|---|---|
+| `Exception` | The **class** (the blueprint) | `<class 'Exception'>` |
+| `ZeroDivisionError` | A **specific class** (a child of Exception) | `<class 'ZeroDivisionError'>` |
+| The exception **object** | The actual error that happened | `division by zero` |
+
+```
+Exception  ───  the GENERAL category "any error"  (a blueprint)
+   │
+   ├── ZeroDivisionError  ───  the SPECIFIC category "math errors"  (also a blueprint)
+   │       │
+   │       └── instance  ───  the ACTUAL error: "division by zero"
+   │
+   ├── ValueError
+   ├── TypeError
+   └── ...
+```
+
+When you write `print(Exception)`, you're printing the **blueprint**, not the actual error. It's like asking "tell me about this specific car crash" and getting back the answer "Car." Useless.
+
+#### The Fix: Capture the Object With `as e`
+
+```python
+try:
+    val = 1/0
+except Exception as e:    # ← capture the actual error as 'e'
+    print(e)              # ← print the OBJECT, not the class
+```
+
+**Output:**
+```
+division by zero
+```
+
+Now `e` is the **actual exception object** — the specific error that happened, with all its details. The name `e` is just a variable (you could call it `error`, `err`, `whatever` — `e` is convention).
+
+#### Useful Things You Can Do With The Captured Object
+
+```python
+try:
+    val = 1/0
+except Exception as e:
+    print(e)                       # division by zero
+    print(type(e))                 # <class 'ZeroDivisionError'>
+    print(type(e).__name__)        # 'ZeroDivisionError' (just the name)
+    print(repr(e))                 # ZeroDivisionError('division by zero')
+```
+
+#### Side-By-Side Comparison
+
+```python
+# Version 1: Prints the blueprint — useless
+except Exception:
+    print(Exception)
+# Output: <class 'Exception'>
+
+# Version 2: Prints just the message
+except Exception as e:
+    print(e)
+# Output: division by zero
+
+# Version 3: Prints type + message — best for debugging
+except Exception as e:
+    print(f"{type(e).__name__}: {e}")
+# Output: ZeroDivisionError: division by zero
+
+# Version 4: Catch the specific type — best for production
+except ZeroDivisionError as e:
+    print(f"Math error: {e}")
+# Output: Math error: division by zero
+```
+
+> **The mental model:** Class names appear in `except <ClassName>:` to say WHAT to catch. The `as e` part captures the *actual error that occurred* so you can read its details.
+
+### 4.5 Catching Specific Exceptions
+
+```python
+# ❌ BAD — catches EVERYTHING, including bugs you should know about
+try:
+    risky_thing()
+except:                       # naked except — hides real bugs!
+    print("Something broke")
+
+# ❌ ALSO BAD — same problem, just slightly more polite
+try:
+    risky_thing()
+except Exception:
+    print("Something broke")
+
+# ✅ GOOD — be specific about what you expect
+try:
+    age = int(input("Age: "))
+except ValueError:
+    print("Please enter a number, not text.")
+```
+
+> ⚠️ **The bare-except sin:** If you catch all errors blindly, real bugs (typos, wrong variable names) get silently swallowed. You'll spend hours wondering why your code "isn't working" when actually a different line is silently failing.
+
+### 4.6 Multiple `except` Blocks
+
+```python
+try:
+    with open("config.json", "r", encoding="utf-8") as f:
+        config = json.load(f)
+        api_key = config["api_key"]
+
+except FileNotFoundError:
+    print("config.json not found. Create one with your API key.")
+
+except json.JSONDecodeError:
+    print("config.json is malformed — check your JSON syntax.")
+
+except KeyError:
+    print("config.json is missing the 'api_key' field.")
+```
+
+**Catch multiple exceptions in ONE block:**
+
+```python
+try:
+    risky_api_call()
+except (TimeoutError, ConnectionError) as e:
+    print(f"Network problem: {e}")
+```
+
+### 4.7 The `else` Clause
+
+```python
+try:
+    response = claude_api_call(prompt)
+except RateLimitError:
+    print("Rate limited. Try again in a minute.")
+except TimeoutError:
+    print("Took too long.")
+else:
+    # ONLY runs if NO exception happened.
+    save_to_log(response)
+    print("Success!")
+```
+
+**Why use `else` instead of putting `save_to_log()` inside `try`?** Because if `save_to_log()` itself crashes, that's a different bug — you don't want to silently catch it as if it were a network error.
+
+### 4.8 The `finally` Clause
+
+```python
+try:
+    f = open("data.txt", "r")
+    process(f)
+except FileNotFoundError:
+    print("Missing file")
+finally:
+    print("Cleaning up...")
+    # Runs whether the try succeeded, an except handled an error,
+    # or even if an UNCAUGHT error is propagating up.
+```
+
+**Use `finally` for cleanup that must always happen** — closing connections, releasing locks, deleting temp files. With `with` statements, you rarely need `finally` for files — but you'll use it for database connections, locks, etc.
+
+### 4.9 Full Picture — `try / except / else / finally`
+
+```python
+try:
+    # 1. The risky code
+    response = call_claude(prompt)
+except RateLimitError:
+    # 2. Handle specific errors
+    print("Rate limited.")
+except Exception as e:
+    # 3. Catch-all (use sparingly, AT THE END)
+    print(f"Unexpected: {e}")
+else:
+    # 4. Runs only if NO error happened
+    print("Success!")
+    process(response)
+finally:
+    # 5. ALWAYS runs, no matter what
+    print("Cleanup complete.")
+```
+
+### 4.10 `raise` — Throwing Your Own Errors
+
+Sometimes you WANT your code to crash on purpose — to alert the caller that something is wrong:
+
+```python
+def process_age(age):
+    if age < 0:
+        raise ValueError("Age cannot be negative")
+    if age > 150:
+        raise ValueError("Age seems unrealistic")
+    return f"Age is {age}"
+
+process_age(-5)
+# ValueError: Age cannot be negative
+```
+
+**Re-raising after logging:**
+
+```python
+try:
+    risky_call()
+except APIError as e:
+    log_to_file(f"API failed: {e}")
+    raise            # re-raises the SAME exception so the caller sees it
+```
+
+### 4.11 Custom Exception Classes
+
+Python has built-in exceptions like `ValueError`, `KeyError`, `ZeroDivisionError`. But sometimes you need an error specific to YOUR application — something Python doesn't have.
+
+In an AI app, you might want:
+- `InvalidPromptError` — when someone sends an empty prompt
+- `APIRateLimitError` — when Claude says "slow down"
+- `BannedContentError` — when a prompt contains banned words
+
+These don't exist in Python. So you **make them yourself**.
+
+#### Step 1: The Simplest Custom Exception
+
+```python
+class InvalidPromptError(Exception):
+    pass
+```
+
+Three things to notice:
+
+1. **`class InvalidPromptError`** — defining a new class. Class names use PascalCase by convention.
+2. **`(Exception)`** — this means "inherit from Exception." Your new class IS an Exception now.
+3. **`pass`** — Python syntax meaning "the body is empty." We're inheriting all behavior from `Exception`.
+
+> **Why inherit from `Exception`?** Because that's what makes Python recognize it as an "error you can `raise` and `catch`." If you write `class InvalidPromptError:` (without the `(Exception)`), Python treats it as a regular class — NOT an error.
+
+#### Step 2: Using Your Custom Exception
+
+```python
+class InvalidPromptError(Exception):
+    pass
+
+def send_to_claude(prompt):
+    if len(prompt) == 0:
+        raise InvalidPromptError("Prompt cannot be empty")
+    if len(prompt) > 100_000:
+        raise InvalidPromptError(f"Prompt is too long: {len(prompt)} chars")
+    return "Mock Claude response"
+
+try:
+    send_to_claude("")
+except InvalidPromptError as e:
+    print(f"Caught your custom error: {e}")
+# Output: Caught your custom error: Prompt cannot be empty
+```
+
+The flow:
+1. `raise InvalidPromptError("...")` creates an instance with that message and crashes the function.
+2. `except InvalidPromptError as e:` catches it.
+3. `e` is the instance; printing it shows the message.
+
+#### Step 3: Why Not Just Use `ValueError`?
+
+You CAN. But imagine your app raises `ValueError` for bad ages, bad emails, bad prompts, bad numbers — 50 different reasons. Then you can't tell them apart:
+
+```python
+try:
+    send_to_claude(user_input)
+except ValueError as e:
+    # Was this a prompt error? Email error? Age error?
+    # No way to tell except by reading the message string. Fragile!
+```
+
+With custom exceptions, each error type gets its **own specific reaction**:
+
+```python
+try:
+    send_to_claude(user_input)
+except InvalidPromptError as e:
+    show_user("Please fix your prompt")
+except APIRateLimitError as e:
+    show_user("System busy, try in a minute")
+except BannedContentError as e:
+    show_user("That content isn't allowed")
+    log_to_security_team(e)
+```
+
+> **Analogy:** A hospital with only one diagnosis ("patient is sick") is useless. Doctors need specific diagnoses (broken arm vs heart attack vs flu) to apply the right treatment. Custom exceptions are specific diagnoses for your code.
+
+#### Step 4: Adding Extra Data To Your Custom Exception
+
+Sometimes you want your error to carry MORE than a message — like a retry-after time:
+
+```python
+class APIRateLimitError(Exception):
+    def __init__(self, message, retry_after_seconds):
+        super().__init__(message)              # pass message to parent
+        self.retry_after = retry_after_seconds  # store extra data
+
+def call_claude():
+    raise APIRateLimitError("Too many requests", retry_after_seconds=60)
+
+try:
+    call_claude()
+except APIRateLimitError as e:
+    print(f"Error: {e}")              # Too many requests
+    print(f"Wait {e.retry_after}s")   # Wait 60s
+    # time.sleep(e.retry_after); retry...
+```
+
+> Don't worry if `__init__`, `self`, and `super()` look unfamiliar — that's classes/OOP, your **Day 5** topic. For now, just understand the pattern.
+
+#### Step 5: Building An Exception Hierarchy
+
+In bigger apps, build a "family tree" of exceptions:
+
+```python
+class MyAIAppError(Exception):
+    """Base class for all errors in this app."""
+    pass
+
+class InvalidPromptError(MyAIAppError):
+    pass
+
+class APIRateLimitError(MyAIAppError):
+    pass
+
+class BannedContentError(MyAIAppError):
+    pass
+```
+
+Now you have flexibility:
+
+```python
+# Catch ONE specific type
+except InvalidPromptError as e:
+    handle_bad_prompt(e)
+
+# OR catch ANY error from your app
+except MyAIAppError as e:
+    log_app_error(e)
+    # This catches all three — they all inherit from MyAIAppError.
+```
+
+This is exactly how Anthropic's Python SDK is structured:
+
+```
+anthropic.APIError                    # parent
+├── anthropic.APIConnectionError      # network problems
+├── anthropic.RateLimitError          # 429 errors
+├── anthropic.AuthenticationError     # bad API key
+└── anthropic.BadRequestError         # malformed request
+```
+
+On Day 9, you'll write:
+
+```python
+try:
+    response = client.messages.create(...)
+except anthropic.RateLimitError as e:
+    time.sleep(60)
+except anthropic.APIError as e:
+    log_error(e)
+```
+
+#### Try It Yourself
+
+```python
+# custom_exceptions_demo.py
+
+class InvalidPromptError(Exception):
+    """Raised when a prompt fails validation."""
+    pass
+
+class APIRateLimitError(Exception):
+    """Raised when we hit the API rate limit."""
+    def __init__(self, message, retry_after):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def send_to_claude(prompt):
+    if not prompt.strip():
+        raise InvalidPromptError("Prompt cannot be empty or whitespace")
+    if len(prompt) > 100_000:
+        raise InvalidPromptError(f"Prompt too long: {len(prompt)} chars")
+    if "BAD_WORD" in prompt:
+        raise InvalidPromptError("Prompt contains banned content")
+    if prompt == "trigger_rate_limit":
+        raise APIRateLimitError("Rate limit hit", retry_after=30)
+    return f"Mock response to: {prompt}"
+
+
+# Test cases
+test_cases = ["", "This contains BAD_WORD inside", "trigger_rate_limit",
+              "What is the capital of France?"]
+
+for prompt in test_cases:
+    try:
+        result = send_to_claude(prompt)
+        print(f"✅ Success: {result}")
+    except InvalidPromptError as e:
+        print(f"❌ {type(e).__name__}: {e}")
+    except APIRateLimitError as e:
+        print(f"⏳ {type(e).__name__}: {e} (retry in {e.retry_after}s)")
+```
+
+### 4.12 Common Built-in Exceptions Cheat Sheet
+
+| Exception | When it happens | Example trigger |
+|---|---|---|
+| `ValueError` | Right type, wrong value | `int("abc")` |
+| `TypeError` | Wrong type entirely | `"hello" + 5` |
+| `KeyError` | Dict key missing | `my_dict["missing"]` |
+| `IndexError` | List index out of range | `my_list[999]` |
+| `AttributeError` | Object has no such method/property | `"hello".no_such_method()` |
+| `FileNotFoundError` | File doesn't exist | `open("missing.txt")` |
+| `PermissionError` | OS won't let you read/write | `open("/etc/shadow")` |
+| `JSONDecodeError` | Malformed JSON | `json.loads("not json")` |
+| `UnicodeDecodeError` | Wrong encoding | Reading non-UTF-8 as UTF-8 |
+| `ZeroDivisionError` | Divide by zero | `5 / 0` |
+| `ConnectionError` | Network broke | API call with no internet |
+| `TimeoutError` | Operation took too long | Slow API |
+| `KeyboardInterrupt` | User pressed Ctrl+C | (don't catch this!) |
+
+### 4.13 Real-World AI Pattern — Retry With Backoff
+
+This is the pattern you'll use whenever you call an AI API in production:
+
+```python
+import time
+import json
+
+class APIError(Exception):
+    pass
+
+def call_claude_with_retry(prompt, max_retries=3):
+    """Call Claude, retry on transient errors with increasing delays."""
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = claude_api_call(prompt)        # the actual call
+            return response                            # success → done
+
+        except (TimeoutError, ConnectionError) as e:
+            # Network issues — worth retrying
+            if attempt == max_retries:
+                raise APIError(f"Failed after {max_retries} retries: {e}")
+            wait = 2 ** attempt        # 2s, 4s, 8s — exponential backoff
+            print(f"Attempt {attempt} failed ({e}). Retrying in {wait}s...")
+            time.sleep(wait)
+
+        except json.JSONDecodeError as e:
+            # Malformed response — probably a service-side bug, don't retry
+            raise APIError(f"Got invalid JSON from API: {e}")
+
+        except Exception as e:
+            # Anything unexpected — log and re-raise
+            print(f"Unexpected error: {e}")
+            raise
+```
+
+**Why this matters:** The naive version (`response = claude_api_call(prompt)`) crashes the whole app if the wifi blinks for 1 second. This version waits and retries — a much better user experience.
+
+> You'll write a real version of this on Day 9 when you call the actual Claude API. Memorize the shape of this pattern now.
+
+---
+
+## Day 4 Experiment — Mini Conversation Logger
+
+This experiment ties everything together: file reading, JSON, CSV, and error handling. Think of it as a dry run for the real Claude API logger you'll build on Day 9.
+
+**Setup — create these files in your project folder:**
+
+`system_prompt.txt`:
+```
+You are a helpful AI assistant specialized in career advice for developers
+transitioning to AI engineering.
+```
+
+`questions.csv`:
+```csv
+id,question
+1,What languages should I learn first?
+2,Do I need a PhD to be an AI engineer?
+3,How long does the transition take?
+```
+
+**The script — `conversation_logger.py`:**
+
+```python
+import csv
+import json
+from datetime import datetime
+from pathlib import Path
+
+# --- Custom exceptions ---
+class ConfigError(Exception):
+    pass
+
+class DatasetError(Exception):
+    pass
+
+# --- Step 1: Load the system prompt ---
+def load_system_prompt(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        raise ConfigError(f"System prompt not found at {path}")
+
+# --- Step 2: Load questions from CSV ---
+def load_questions(path: Path) -> list[dict]:
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            questions = [row for row in reader]
+        if not questions:
+            raise DatasetError("Questions file is empty")
+        return questions
+    except FileNotFoundError:
+        raise DatasetError(f"Questions file not found at {path}")
+
+# --- Step 3: Fake "AI" response (we'll replace with real Claude on Day 9) ---
+def fake_ai_response(prompt: str) -> str:
+    return f"[Mock response to: '{prompt[:50]}...']"
+
+# --- Step 4: Log results in JSONL format ---
+def log_interaction(log_path: Path, entry: dict) -> None:
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+# --- Main flow ---
+def main():
+    base = Path(__file__).parent
+    system_prompt_path = base / "system_prompt.txt"
+    questions_path = base / "questions.csv"
+    log_path = base / "conversation_log.jsonl"
+
+    try:
+        system_prompt = load_system_prompt(system_prompt_path)
+        questions = load_questions(questions_path)
+    except (ConfigError, DatasetError) as e:
+        print(f"Setup failed: {e}")
+        return
+
+    print(f"Loaded {len(questions)} questions. Processing...\n")
+
+    for q in questions:
+        try:
+            qid = int(q["id"])
+            question_text = q["question"]
+        except (ValueError, KeyError) as e:
+            print(f"Skipping malformed row {q}: {e}")
+            continue
+
+        try:
+            answer = fake_ai_response(question_text)
+        except Exception as e:
+            print(f"AI call failed for Q{qid}: {e}")
+            continue
+
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "id": qid,
+            "system_prompt": system_prompt,
+            "question": question_text,
+            "answer": answer,
+        }
+        log_interaction(log_path, entry)
+        print(f"Q{qid}: {question_text}")
+        print(f"   → {answer}\n")
+
+    print(f"Done. Log written to: {log_path}")
+
+if __name__ == "__main__":
+    main()
+```
+
+**What this script demonstrates:**
+
+| Concept from Day 4 | Where it appears |
+|---|---|
+| `pathlib.Path` | Building file paths |
+| Reading text files (`read_text`) | Loading the system prompt |
+| `csv.DictReader` | Reading questions |
+| `json.dumps` + JSONL | Writing log entries |
+| Custom exceptions | `ConfigError`, `DatasetError` |
+| Specific `except` blocks | Different errors handled differently |
+| `try / except / continue` | Skipping bad rows without crashing |
+| UTF-8 everywhere | All file opens use `encoding="utf-8"` |
+| `with` statement | All file operations |
+
+**Bonus challenges:**
+1. Add a CLI flag to choose between `--mock` and `--live` (Day 9 preview).
+2. Compute total tokens used (mock for now: `len(answer.split())`).
+3. Read previous `conversation_log.jsonl` and skip questions already answered (cache!).
+4. Rotate the log file when it exceeds 1 MB (`os.path.getsize` + rename).
+5. Wrap `fake_ai_response` in the retry-with-backoff pattern from §4.13.
+
+---
+
+## Common Pitfalls I Hit
+
+These are real bugs I ran into during Day 4 — documented so future-me doesn't repeat them.
+
+#### Pitfall 1: Markdown Auto-Linking on Copy-Paste
+
+When copying code from chat or docs, file names with dots can get rendered as clickable links and pasted as markdown:
+
+```python
+# What I pasted:
+content = [file.read](http://file.read)()
+# What I meant:
+content = file.read()
+```
+
+```bash
+# What I pasted:
+python [main.py](http://main.py)
+# What I meant:
+python main.py
+```
+
+**Fix:** Watch for `[...]` and `(http://...)` wrapping in pasted code — strip them out and type the actual code.
+
+#### Pitfall 2: Printing the Class Instead of the Error Object
+
+```python
+try:
+    val = 1/0
+except Exception:
+    print(Exception)         # <class 'Exception'> — useless
+    # Need: except Exception as e: print(e)  → "division by zero"
+```
+
+#### Pitfall 3: Forgetting `encoding="utf-8"`
+
+Code worked on Windows, broke on Linux deployment when the file contained an emoji. Always pass `encoding="utf-8"` explicitly. Always.
+
+#### Pitfall 4: Forgetting `newline=""` on CSV
+
+Got blank rows between every entry when Excel opened my CSV. Fix is always `newline=""` — both for read and write.
+
+#### Pitfall 5: Treating `row["age"]` as a Number
+
+`csv.DictReader` returns ALL values as strings. `row["age"] + 1` crashes with `TypeError`. Convert: `int(row["age"]) + 1`.
+
+#### Pitfall 6: Bare `except:` Hiding Bugs
+
+```python
+# This swallowed a typo in my variable name for 30 minutes
+try:
+    do_thing()
+except:
+    print("something broke")
+```
+
+Always catch specific exception types. If you must catch broadly, at least use `except Exception as e: print(e)` so you SEE what went wrong.
+
+---
+
+## Day 4 Cheat Sheet
+
+### File I/O
+```python
+# Always: with + encoding="utf-8"
+with open("file.txt", "r", encoding="utf-8") as f:
+    content = f.read()                         # everything as one string
+    # for line in f: ...                       # line-by-line (for big files)
+
+with open("file.txt", "w", encoding="utf-8") as f:
+    f.write("text\n")                          # remember \n!
+
+with open("file.txt", "a", encoding="utf-8") as f:
+    f.write("new line\n")                      # append, never overwrites
+
+# pathlib (modern way)
+from pathlib import Path
+path = Path("data") / "file.txt"
+path.exists()                                  # check first
+text = path.read_text(encoding="utf-8")
+path.write_text("hello", encoding="utf-8")
+```
+
+### CSV
+```python
+import csv
+
+# Read
+with open("data.csv", "r", encoding="utf-8", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(row["column_name"])              # row is a dict (all strings!)
+
+# Read with custom delimiter (TSV, European CSV)
+csv.reader(f, delimiter="\t")                  # tab-separated
+csv.reader(f, delimiter=";")                   # semicolon-separated
+
+# Read file with NO header
+csv.DictReader(f, fieldnames=["name", "age"])  # provide your own names
+
+# Handle missing values
+salary = int(row.get("salary", "") or "0")     # missing key OR empty string
+
+# Write
+with open("out.csv", "w", encoding="utf-8", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["a", "b"])
+    writer.writeheader()
+    writer.writerows([{"a": 1, "b": 2}])
+```
+
+### JSON
+```python
+import json
+
+# Read
+with open("data.json", "r", encoding="utf-8") as f:
+    data = json.load(f)                        # file → dict
+data = json.loads('{"x": 1}')                  # string → dict
+
+# Write
+with open("out.json", "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+text = json.dumps(data, indent=2, ensure_ascii=False)
+
+# JSONL (line-by-line, for big AI datasets)
+with open("data.jsonl", "r", encoding="utf-8") as f:
+    for line in f:
+        record = json.loads(line)
+
+with open("data.jsonl", "a", encoding="utf-8") as f:
+    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+```
+
+### Error Handling
+```python
+try:
+    risky_thing()
+except SpecificError as e:           # specific first, capture object as e
+    handle(e)
+except (ErrorA, ErrorB):             # group related
+    ...
+except Exception as e:               # broad catch (last)
+    log(e)
+    raise                            # re-raise if needed
+else:
+    # only runs if no exception
+    success()
+finally:
+    # ALWAYS runs
+    cleanup()
+```
+
+### Custom Exception
+```python
+# Simplest form
+class MyError(Exception):
+    pass
+
+# With extra data
+class APIRateLimitError(Exception):
+    def __init__(self, message, retry_after):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+# Use them
+raise MyError("Something specific went wrong")
+
+try:
+    do_stuff()
+except MyError as e:
+    handle(e)
+```
+
+### AI Engineer's Default File Open
+```python
+# Memorize this — it's the pattern for 90% of file operations
+with open(path, MODE, encoding="utf-8") as f:
+    ...
+# MODE: "r" read, "w" write (overwrites!), "a" append
+# For binary (PDFs, images): mode="rb" or "wb", drop encoding
+# For CSVs: also add newline=""
+```
+
+---
+
+> **Note to future me:** When you build your first real AI app (Day 15+), come back to §4.13 — the retry-with-backoff pattern. It's the difference between a demo and a product. Also remember: every file open should have `encoding="utf-8"` and use `with`. No exceptions.
+
+> **The big lesson of Day 4:** Files persist data between runs. Errors happen constantly when talking to networks and APIs. These two skills — saving state to disk, and recovering from failures — are what turn a script into software.
+
+
+
+### Day 5 — Object-Oriented Programming (OOP)
+
+> **Goal:** Understand how to structure code using classes — the foundation of every AI library you'll touch. `anthropic.Anthropic()`, `ChatOpenAI()`, `FastAPI()`, `BaseModel` from Pydantic — these are ALL classes. Before today, you USED classes. After today, you'll BUILD them.
+
+#### Why OOP Matters for AI Engineering
+
+Look at any real AI code:
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()              # Creating an OBJECT from the Anthropic CLASS
+response = client.messages.create(...)      # Calling a METHOD on the object
+print(response.content[0].text)             # Accessing ATTRIBUTES of the response object
+```
+
+Every line above uses OOP. You cannot:
+- Read AI library source code without understanding classes
+- Build clean AI apps (agents, RAG systems, tool registries) without classes
+- Use frameworks like LangChain, FastAPI, Pydantic without OOP
+
+**Power Platform parallel:** Think of a Copilot Studio agent. It has properties (name, instructions), behaviors (responds to messages, calls actions), and you can create multiple instances (different agents for different teams). Classes are the same idea in code — a blueprint that defines what something IS and what it can DO, and you can stamp out many copies.
+
+---
+
+#### 1. Classes and Objects — Blueprints vs. Things
+
+**Class = the blueprint. Object (instance) = the thing built from the blueprint.**
+
+| Real World | Code |
+|---|---|
+| Architectural blueprint of a house | `class House:` |
+| Actual house built from the blueprint | `my_house = House()` |
+| Another house from the same blueprint | `your_house = House()` |
+
+Both `my_house` and `your_house` are SEPARATE objects — different addresses, different paint colors — but they share the same structure (rooms, doors, roof) defined by the class.
+
+```python
+class AIModel:
+    pass    # 'pass' = "empty for now, don't error"
+
+# Creating objects (instances) from the class
+gpt = AIModel()         # Object 1
+claude = AIModel()      # Object 2
+
+print(type(gpt))        # <class '__main__.AIModel'>
+print(gpt is claude)    # False — different objects in memory
+```
+
+**Convention:** Class names use `PascalCase` (`AIModel`, `ModelRegistry`), variables use `snake_case` (`gpt_model`). Enforced by every Python codebase.
+
+---
+
+#### 2. `__init__` and `self` — The Constructor
+
+A class with `pass` is useless. We need to give each object its own data. That's what `__init__` does.
+
+```python
+class AIModel:
+    def __init__(self, name, version, accuracy):
+        self.name = name
+        self.version = version
+        self.accuracy = accuracy
+
+claude = AIModel("Claude", "Opus 4.7", 0.95)
+gpt = AIModel("GPT", "4o", 0.92)
+
+print(claude.name)       # "Claude"
+print(gpt.accuracy)      # 0.92
+```
+
+**What is `__init__`?** A special method Python calls AUTOMATICALLY when you create an object. It "initializes" the object with starting values. The double underscores (`__`) mean "this is a Python magic method — don't call it directly, Python calls it for you."
+
+**What is `self`?** This is THE most confusing thing about Python OOP. Three explanations:
+
+**(a) `self` means "this specific object":**
+```python
+claude = AIModel("Claude", "Opus 4.7", 0.95)
+# When __init__ runs:
+#   self  →  refers to claude (the object being built)
+#   name  →  "Claude"
+# So self.name = name  →  claude.name = "Claude"
+```
+
+**(b) `self` is how you store data ON the object:**
+```python
+def __init__(self, name):
+    name = name           # ❌ Just a local variable, lost when __init__ ends
+    self.name = name      # ✅ Saved to the object permanently
+```
+
+**(c) `self` is automatic — you never pass it:**
+```python
+claude = AIModel("Claude", "Opus 4.7", 0.95)
+#                  ↑          ↑           ↑
+#                 name     version    accuracy
+# Python AUTOMATICALLY passes 'self' behind the scenes
+```
+
+> ⚠️ **Common mistakes that confused me when I started:**
+> - Forgetting `self` in method definitions: `def add_model(name):` instead of `def add_model(self, name):`
+> - Forgetting to use `self.` to store: writing `name = name` instead of `self.name = name`
+> - Forgetting to use `self.` to access: writing `print(name)` instead of `print(self.name)`
+
+---
+
+#### 3. Instance Attributes vs. Class Attributes
+
+Two places to store data — and the difference matters:
+
+```python
+class AIModel:
+    company = "Various"              # CLASS attribute — shared by ALL instances
+    
+    def __init__(self, name, accuracy):
+        self.name = name             # INSTANCE attribute — unique per object
+        self.accuracy = accuracy
+
+claude = AIModel("Claude", 0.95)
+gpt = AIModel("GPT", 0.92)
+
+print(claude.name, gpt.name)         # "Claude" "GPT"     — different (instance)
+print(claude.company, gpt.company)   # "Various" "Various" — same (class)
+
+AIModel.company = "AI Inc"           # changing class attribute affects everyone:
+print(claude.company, gpt.company)   # "AI Inc" "AI Inc"
+```
+
+**Use class attributes for:** constants, defaults, counters spanning all instances.
+**Use instance attributes for:** anything unique to each object (the 99% case).
+
+> ⚠️ **The mutable class attribute trap** — bites every Python beginner exactly once:
+> ```python
+> # ❌ WRONG — every registry shares the SAME list
+> class ModelRegistry:
+>     models = []    # class attribute — shared across all instances!
+> 
+> r1 = ModelRegistry()
+> r2 = ModelRegistry()
+> r1.models.append("Claude")
+> print(r2.models)    # ["Claude"] — wait, what?! r2 has it too!
+> 
+> # ✅ RIGHT — each registry gets its own list
+> class ModelRegistry:
+>     def __init__(self):
+>         self.models = []    # instance attribute — unique per object
+> ```
+
+---
+
+#### 4. The Three Method Flavors — Instance, Class, Static
+
+You'll see all three in real AI code. Here's the full picture in one example:
+
+```python
+class AIModel:
+    total_count = 0    # CLASS attribute (shared by all instances)
+    
+    def __init__(self, name):
+        self.name = name
+        AIModel.total_count += 1
+    
+    # 1. INSTANCE method — needs an object, gets `self`
+    def describe(self):
+        return f"I am {self.name}"
+    
+    # 2. CLASS method — gets `cls` (the class itself)
+    #    Can access/modify class attributes. Can create new instances.
+    @classmethod
+    def get_count(cls):
+        return cls.total_count                  # ✅ read class attribute
+    
+    @classmethod
+    def reset_counter(cls):
+        cls.total_count = 0                     # ✅ MODIFY class attribute
+    
+    @classmethod
+    def from_string(cls, text):
+        name = text.split(":")[0]
+        return cls(name)                        # ✅ CREATE a new instance!
+    
+    # 3. STATIC method — gets NOTHING (no self, no cls)
+    #    Cannot access class or instance data. Just a utility.
+    @staticmethod
+    def is_valid_name(name):
+        return isinstance(name, str) and len(name) > 0
+```
+
+**The hierarchy of access:**
+
+| Method type | Can access `self.x`? | Can access `cls.x`? | Can create new instances? |
+|---|---|---|---|
+| Instance method | ✅ Yes | ✅ Yes (via `self.__class__.x`) | ✅ Yes |
+| `@classmethod` | ❌ No | ✅ Yes | ✅ Yes |
+| `@staticmethod` | ❌ No | ❌ No | ❌ Not really |
+
+**When to use each — the practical rule:**
+
+- **Instance method** → 99% of the time. Anything that uses an object's data.
+- **`@classmethod`** → "Alternative constructors." This is the killer use case. You'll see it everywhere in AI libraries:
+  ```python
+  model = AIModel.from_dict(json_data)        # alternative way to construct
+  model = AIModel.from_pretrained("claude-3") # ← this is exactly how HuggingFace works!
+  tokenizer = Tokenizer.from_file("vocab.txt")
+  ```
+- **`@staticmethod`** → A helper that logically belongs in the class but doesn't need any class/instance data. Use sparingly — you can usually just write a regular function instead.
+
+**Calling them:**
+```python
+AIModel.get_count()         # Normal — class methods belong to the class
+claude = AIModel("Claude")
+claude.get_count()          # Also works, but unusual style
+```
+
+---
+
+#### 5. `@property` and `@setter` — Smart Attributes
+
+**The problem they solve:** A regular attribute lets anyone do this:
+
+```python
+claude.accuracy = 9999       # 😱 nonsense value, but no error
+claude.accuracy = "banana"   # 😱 totally wrong type, no error
+```
+
+You have NO way to validate. In Java/C++, you'd write getter/setter methods:
+
+```java
+// Java/C++ style — UGLY to use
+class AIModel {
+    private double accuracy;
+    public double getAccuracy() { return accuracy; }
+    public void setAccuracy(double v) { 
+        if (v < 0 || v > 1) throw...;
+        this.accuracy = v;
+    }
+}
+// Usage:
+model.setAccuracy(0.9);          // verbose
+double a = model.getAccuracy();  // verbose
+```
+
+Python's `@property` lets you keep the **clean syntax** `model.accuracy = 0.9` BUT **secretly run validation code** behind the scenes:
+
+```python
+class AIModel:
+    def __init__(self, accuracy):
+        self.accuracy = accuracy   # ← this actually calls the SETTER below!
+    
+    @property
+    def accuracy(self):
+        # This runs when someone READS  →  print(model.accuracy)
+        return self._accuracy
+    
+    @accuracy.setter
+    def accuracy(self, value):
+        # This runs when someone WRITES →  model.accuracy = 0.9
+        if not 0 <= value <= 1:
+            raise ValueError(f"Accuracy must be 0-1, got {value}")
+        self._accuracy = value
+
+
+claude = AIModel(0.95)        # Setter runs! _accuracy = 0.95
+print(claude.accuracy)        # Getter runs! → 0.95
+claude.accuracy = 0.92        # Setter runs! validates, then _accuracy = 0.92
+claude.accuracy = 5.0         # Setter runs! → ValueError
+```
+
+**Why two functions named `accuracy`?** The decorators tell Python what each is for:
+- `@property` on top → "this function runs when reading"
+- `@accuracy.setter` on top → "this function runs when writing"
+
+Python links them by name — that's why both are called `accuracy`.
+
+**Why store it in `self._accuracy` (with underscore) instead of `self.accuracy`?**
+
+If you wrote `self.accuracy = value` inside the setter, it would trigger the setter AGAIN — infinite loop, crash. So convention: the public smart attribute is `accuracy`, and the actual storage hides in `_accuracy`.
+
+```
+User writes:    model.accuracy = 0.9
+                       ↓
+                 Triggers setter
+                       ↓
+              Validates, stores in self._accuracy
+                       ↓
+User reads:     print(model.accuracy)
+                       ↓
+                 Triggers getter
+                       ↓
+              Returns self._accuracy
+```
+
+**Computed properties — read-only, no setter:**
+
+```python
+class AIModel:
+    def __init__(self, accuracy):
+        self._accuracy = accuracy
+    
+    @property
+    def grade(self):
+        """Computed on the fly — no _grade variable exists."""
+        if self._accuracy >= 0.95: return "A"
+        if self._accuracy >= 0.85: return "B"
+        return "C"
+
+claude = AIModel(0.95)
+print(claude.grade)     # "A" — looks like an attribute, runs as a function
+# claude.grade = "F"    # AttributeError — no setter defined, so read-only
+```
+
+**Why this matters for AI:** Pydantic — the library every AI engineer uses for API request/response schemas — is built entirely on this validation pattern.
+
+---
+
+#### 6. Built-in Exceptions Are Classes Too
+
+When you write:
+
+```python
+raise TypeError("Expected AIModel")
+```
+
+`TypeError` IS a class — a built-in one Python provides. The line does TWO things:
+
+1. **Creates an instance** of `TypeError` with message `"Expected AIModel"`
+2. **`raise`s** that instance — crashing the program with that error
+
+It's the same as:
+```python
+error_object = TypeError("Expected AIModel")    # create the object
+raise error_object                                # raise it
+```
+
+Python ships with dozens of built-in exception classes:
+
+| Built-in class | Used when |
+|---|---|
+| `TypeError` | Wrong type (string when expected int, etc.) |
+| `ValueError` | Right type, but bad value (`int("hello")`) |
+| `KeyError` | Dictionary key doesn't exist |
+| `IndexError` | List index out of range |
+| `AttributeError` | Object has no such attribute |
+| `FileNotFoundError` | File doesn't exist |
+
+You can even **make your own** by inheriting from `Exception`:
+
+```python
+class ModelNotFoundError(Exception):    # inherits from built-in Exception class
+    pass
+
+raise ModelNotFoundError("Claude not in registry")
+```
+
+So everything you've been seeing — `TypeError`, `ValueError` — they're all classes Python defined for you. You're using OOP whether you knew it or not.
+
+---
+
+#### 7. Access Modifiers — Python vs C++/Java
+
+**C++/Java have STRICT access modifiers** enforced by the compiler:
+
+```cpp
+// C++
+class AIModel {
+public:
+    string name;        // anyone can access
+protected:
+    double accuracy;    // only this class AND child classes
+private:
+    string apiKey;      // ONLY this class — not even children!
+};
+
+class LLMModel : public AIModel {
+    void test() {
+        name = "x";       // ✅ allowed (public)
+        accuracy = 0.9;   // ✅ allowed (protected, child class)
+        apiKey = "key";   // ❌ COMPILE ERROR (private, child can't see)
+    }
+};
+```
+
+In C++/Java the compiler **physically prevents** you from accessing private members. Code won't compile.
+
+**Python's philosophy is different.** Guido van Rossum (Python's creator) famously said: *"We're all consenting adults here."* Python uses **CONVENTION**, not enforcement:
+
+| Python style | Meaning | Enforced? |
+|---|---|---|
+| `self.name` | Public | N/A |
+| `self._name` | "Protected" — please don't touch from outside | ❌ NOT enforced — just a hint |
+| `self.__name` | "Private" — name-mangled | ⚠️ Partially — see below |
+
+**Demo of the difference:**
+
+```python
+class MyClass:
+    def __init__(self):
+        self.public_var = 1
+        self._protected_var = 2     # single underscore: convention only
+        self.__private_var = 3      # double underscore: NAME MANGLING happens
+
+obj = MyClass()
+
+print(obj.public_var)         # ✅ 1 — works
+print(obj._protected_var)     # ✅ 2 — works! Python doesn't actually stop you
+                              #    (the underscore is just a "please don't" sign)
+
+print(obj.__private_var)      # ❌ AttributeError!
+```
+
+Why does the double-underscore one fail? Because **Python silently renamed it**:
+
+```python
+print(obj.__dict__)
+# {'public_var': 1, '_protected_var': 2, '_MyClass__private_var': 3}
+#                                          ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+#                                          Python renamed it!
+
+print(obj._MyClass__private_var)    # ✅ 3 — works with the mangled name
+```
+
+This is called **name mangling**. Python takes `__private_var` and renames it to `_ClassName__private_var`. Not real privacy — anyone can still access it — but it makes accidental access in inheritance unlikely.
+
+**The full naming convention table:**
+
+| Pattern | Name | What Python does | When to use |
+|---|---|---|---|
+| `name` | Public | Nothing — fully exposed | Default for everything |
+| `_name` | "Protected" | Nothing — convention only | "Please don't touch from outside" |
+| `__name` | "Private" | Name mangling (`_Class__name`) | Avoid accidental access in subclasses |
+| `__name__` | Magic / dunder | Special meaning to Python | DON'T make your own |
+
+> ⚠️ **Don't use `__double_underscore` casually.** It causes more problems than it solves. In real Python code, single underscore (`_name`) is used 99% of the time. Double underscore is reserved for specific name-collision problems in complex inheritance.
+
+---
+
+#### 8. Inheritance — Reusing and Extending Classes
+
+> **The single most powerful idea in OOP.** A class can INHERIT from another — getting all attributes/methods for free, then adding/overriding what's different.
+
+```python
+class AIModel:                                    # PARENT class
+    def __init__(self, name, version, accuracy):
+        self.name = name
+        self.version = version
+        self.accuracy = accuracy
+    
+    def describe(self):
+        return f"{self.name} {self.version}"
+
+class LLMModel(AIModel):                          # CHILD inherits from AIModel
+    def __init__(self, name, version, accuracy, context_window, parameter_count):
+        super().__init__(name, version, accuracy) # Call PARENT'S __init__ first
+        self.context_window = context_window      # Add NEW attributes
+        self.parameter_count = parameter_count
+    
+    def describe(self):                           # OVERRIDE the parent's method
+        base = super().describe()                  # Call parent's version, add to it
+        return f"{base} [LLM, context: {self.context_window:,} tokens]"
+
+claude = LLMModel("Claude", "Opus 4.7", 0.95, 200000, 175_000_000_000)
+
+print(claude.name)                # "Claude"     ← inherited from AIModel
+print(claude.context_window)      # 200000       ← LLMModel's own attribute
+print(claude.describe())          # "Claude Opus 4.7 [LLM, context: 200,000 tokens]"
+
+print(isinstance(claude, LLMModel))   # True
+print(isinstance(claude, AIModel))    # True — an LLMModel IS-A AIModel
+```
+
+**`super()` explained:** Calls the parent class's version of a method. Three reasons to use it:
+
+1. **In `__init__`:** `super().__init__(...)` runs the parent's setup. Always do this when you have your own `__init__`.
+2. **In overridden methods:** Run parent's logic, then add your own (the `describe()` example).
+3. **Safer than calling parent by name** (`AIModel.__init__(self, ...)` works but breaks if you rename or change inheritance).
+
+**The IS-A test — when to use inheritance:**
+- ✅ "An LLMModel IS-A AIModel" → inheritance works
+- ❌ "A ModelRegistry IS-A AIModel" → NO! A registry HAS-A bunch of models. Use composition.
+
+> ⚠️ **Don't overuse inheritance.** Beginners reach for it constantly. Real Python codebases prefer **composition** ("class A has-a class B" — store B inside A) over deep inheritance trees.
+
+---
+
+#### 9. Inheritance Patterns — Many Ways to Inherit
+
+Parent → child is just the simplest. Python supports several patterns:
+
+##### (a) Single inheritance
+```python
+class AIModel: pass
+class LLMModel(AIModel): pass        # one parent, one child
+```
+
+##### (b) Multilevel (grandparent → parent → child)
+```python
+class AIModel: pass
+class LLMModel(AIModel): pass
+class ChatModel(LLMModel): pass      # ChatModel gets EVERYTHING from both
+```
+
+`ChatModel` inherits from `LLMModel`, which inherits from `AIModel`. Real example: `torch.nn.Module → torch.nn.Linear → YourCustomLayer`.
+
+##### (c) Hierarchical (one parent → multiple children)
+```python
+class AIModel: pass
+class LLMModel(AIModel): pass        # sibling 1
+class VisionModel(AIModel): pass     # sibling 2
+class AudioModel(AIModel): pass      # sibling 3
+```
+
+All children share `AIModel`'s functionality but specialize differently. **Extremely common.**
+
+##### (d) Multiple inheritance (multiple parents → one child)
+
+Python supports this. Java doesn't (forbidden). C++ does (carefully).
+
+```python
+class Trainable:
+    def train(self):
+        print("Training...")
+
+class Serializable:
+    def save(self, path):
+        print(f"Saving to {path}")
+
+class AIModel(Trainable, Serializable):    # inherits from BOTH!
+    pass
+
+claude = AIModel()
+claude.train()        # ✅ from Trainable
+claude.save("file")   # ✅ from Serializable
+```
+
+This is called the **mixin pattern** — used heavily in Django, PyTorch, scikit-learn. Each parent adds a small "capability" like clip-on tools.
+
+##### (e) Diamond inheritance (the tricky one)
+
+```python
+class A:
+    def hello(self): print("A")
+
+class B(A):
+    def hello(self): print("B")
+
+class C(A):
+    def hello(self): print("C")
+
+class D(B, C): pass       # D inherits from BOTH B and C, both inherit from A
+                          # Diamond shape:    A
+                          #                  / \
+                          #                 B   C
+                          #                  \ /
+                          #                   D
+
+d = D()
+d.hello()                 # Which one runs? B's or C's?
+```
+
+Famous **diamond problem**. Python solves it using **MRO (Method Resolution Order)** — a deterministic algorithm called C3 linearization:
+
+```python
+print(D.__mro__)
+# (<class 'D'>, <class 'B'>, <class 'C'>, <class 'A'>, <class 'object'>)
+# d.hello() prints "B" — Python searches D → B → C → A
+```
+
+C++ requires manual disambiguation. Java just **forbids** multiple inheritance to avoid this whole mess.
+
+##### Summary of inheritance patterns
+
+| Pattern | Diagram | Python | Java | C++ |
+|---|---|---|---|---|
+| Single | A → B | ✅ | ✅ | ✅ |
+| Multilevel | A → B → C | ✅ | ✅ | ✅ |
+| Hierarchical | A → B, A → C | ✅ | ✅ | ✅ |
+| Multiple | A, B → C | ✅ | ❌ (use interfaces) | ✅ |
+| Diamond | A → B,C → D | ✅ (MRO handles it) | ❌ | ⚠️ (manual) |
+
+---
+
+#### 10. Magic Methods (Dunder Methods) — `__str__`, `__repr__`
+
+"Magic methods" or "dunder methods" (double underscore on BOTH sides) are methods Python calls automatically in specific situations. You've already met `__init__`.
+
+The two most important ones for daily use:
+
+```python
+class AIModel:
+    def __init__(self, name, version, accuracy):
+        self.name = name
+        self.version = version
+        self.accuracy = accuracy
+
+claude = AIModel("Claude", "Opus 4.7", 0.95)
+print(claude)        # <__main__.AIModel object at 0x000001E8...> — useless!
+```
+
+That ugly default output is what you get without `__str__` and `__repr__`. Fix it:
+
+```python
+class AIModel:
+    def __init__(self, name, version, accuracy):
+        self.name = name
+        self.version = version
+        self.accuracy = accuracy
+    
+    def __str__(self):
+        """Friendly version — for end users. Used by print() and str()."""
+        return f"{self.name} {self.version}"
+    
+    def __repr__(self):
+        """Developer version — for debugging. Used in REPL, lists, errors."""
+        return f"AIModel(name='{self.name}', version='{self.version}', accuracy={self.accuracy})"
+
+claude = AIModel("Claude", "Opus 4.7", 0.95)
+
+print(claude)        # "Claude Opus 4.7"           ← __str__ is used here
+str(claude)          # "Claude Opus 4.7"           ← __str__
+
+repr(claude)         # "AIModel(name='Claude', ...)" ← __repr__
+[claude]             # [AIModel(name='Claude', ...)] ← lists use __repr__ for items
+```
+
+**The rule:** `__str__` is for humans (readable). `__repr__` is for developers (precise, ideally something you could paste back into Python to recreate the object). When in doubt, define BOTH. If you only define one, define `__repr__` — Python falls back to it when `__str__` is missing.
+
+**Other magic methods worth knowing exist** (`__eq__` for `==`, `__lt__` for `<`, `__len__` for `len()`, `__getitem__` for `obj[key]`) — you'll meet them when you need them. For now, master `__init__`, `__str__`, `__repr__`.
+
+---
+
+#### Quick Mental Model — The Whole Picture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  CLASS = Blueprint                                       │
+│                                                          │
+│  class AIModel:                                          │
+│      company = "Anthropic"        ← class attribute      │
+│                                                          │
+│      def __init__(self, name):    ← constructor          │
+│          self.name = name         ← instance attribute   │
+│                                                          │
+│      def describe(self):          ← instance method      │
+│          return self.name                                │
+│                                                          │
+│      @classmethod                                        │
+│      def from_dict(cls, d): ...   ← alt constructor      │
+│                                                          │
+│      @staticmethod                                       │
+│      def is_valid(x): ...         ← utility              │
+│                                                          │
+│      @property                                           │
+│      def grade(self): ...         ← computed property    │
+│                                                          │
+│      def __str__(self): ...       ← magic method         │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+                         │
+                         │  AIModel("Claude")  →  creates object
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│  OBJECT (Instance)                                       │
+│                                                          │
+│  claude.name = "Claude"                                  │
+│  claude.company = "Anthropic"  (from class)              │
+│  claude.describe()  →  "Claude"                          │
+│  print(claude)  →  triggers __str__                      │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+
+         │  class LLMModel(AIModel):  →  inherits everything
+         ▼
+┌──────────────────────────────────────────────────────────┐
+│  CHILD CLASS (Inherits + Extends)                        │
+│                                                          │
+│  Has everything AIModel has, PLUS:                       │
+│    - context_window                                      │
+│    - parameter_count                                     │
+│    - overridden describe() with extra info               │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Day 5 Experiment — AI Model Registry
+
+> **Goal:** Build a system that manages a catalog of AI models. This same pattern is how LangChain manages LLM providers, how FastAPI manages routes, and how every "registry" or "manager" class works in real code.
+
+```python
+# ai_model_registry.py
+
+class AIModel:
+    """A generic AI model in our registry."""
+    
+    def __init__(self, name, version, accuracy, framework):
+        self.name = name
+        self.version = version
+        self._accuracy = accuracy        # protected, validated via property
+        self.framework = framework       # e.g., "PyTorch", "TensorFlow", "JAX"
+    
+    @property
+    def accuracy(self):
+        return self._accuracy
+    
+    @accuracy.setter
+    def accuracy(self, value):
+        if not 0 <= value <= 1:
+            raise ValueError(f"Accuracy must be between 0 and 1, got {value}")
+        self._accuracy = value
+    
+    @property
+    def grade(self):
+        if self._accuracy >= 0.95: return "A"
+        if self._accuracy >= 0.85: return "B"
+        if self._accuracy >= 0.75: return "C"
+        return "D"
+    
+    def is_production_ready(self):
+        return self._accuracy >= 0.90
+    
+    def __str__(self):
+        return f"{self.name} {self.version} ({self.framework}, grade {self.grade})"
+    
+    def __repr__(self):
+        return (f"AIModel(name='{self.name}', version='{self.version}', "
+                f"accuracy={self._accuracy}, framework='{self.framework}')")
+
+
+class LLMModel(AIModel):
+    """A Large Language Model — a specialized AIModel with extra attributes."""
+    
+    def __init__(self, name, version, accuracy, framework, 
+                 context_window, parameter_count):
+        super().__init__(name, version, accuracy, framework)
+        self.context_window = context_window     # tokens
+        self.parameter_count = parameter_count   # number of parameters
+    
+    def estimate_memory_gb(self):
+        """Rough estimate: 2 bytes per parameter (FP16) → GB."""
+        return (self.parameter_count * 2) / (1024 ** 3)
+    
+    def __str__(self):
+        base = super().__str__()
+        return f"{base} | context: {self.context_window:,} tokens"
+    
+    def __repr__(self):
+        return (f"LLMModel(name='{self.name}', version='{self.version}', "
+                f"accuracy={self._accuracy}, framework='{self.framework}', "
+                f"context_window={self.context_window}, "
+                f"parameter_count={self.parameter_count})")
+
+
+class ModelRegistry:
+    """A registry that stores and manages multiple AIModel objects."""
+    
+    def __init__(self, name="Default Registry"):
+        self.name = name
+        self._models = []                # composition: registry HAS-A list of models
+    
+    def add_model(self, model):
+        """Add a model to the registry."""
+        if not isinstance(model, AIModel):
+            raise TypeError(f"Expected AIModel, got {type(model).__name__}")
+        self._models.append(model)
+        print(f"✅ Added: {model}")
+    
+    def get_best_model(self):
+        """Return the model with the highest accuracy."""
+        if not self._models:
+            return None
+        return max(self._models, key=lambda m: m.accuracy)
+    
+    def list_models_by_framework(self, framework):
+        """Return all models that use a specific framework."""
+        return [m for m in self._models if m.framework.lower() == framework.lower()]
+    
+    def list_production_ready(self):
+        """Return only models with accuracy >= 0.90."""
+        return [m for m in self._models if m.is_production_ready()]
+    
+    def __len__(self):
+        """Now len(registry) works!"""
+        return len(self._models)
+    
+    def __str__(self):
+        return f"{self.name} ({len(self._models)} models)"
+
+
+# ─────────── DEMO ───────────
+if __name__ == "__main__":
+    registry = ModelRegistry("Smadavaram's AI Catalog")
+    
+    # Add some general AI models
+    registry.add_model(AIModel("ResNet", "50", 0.93, "PyTorch"))
+    registry.add_model(AIModel("YOLOv8", "x", 0.91, "PyTorch"))
+    registry.add_model(AIModel("BERT", "base", 0.88, "TensorFlow"))
+    
+    # Add some LLMs (using the child class)
+    registry.add_model(LLMModel("Claude", "Opus 4.7", 0.96, "PyTorch",
+                                context_window=200_000,
+                                parameter_count=175_000_000_000))
+    registry.add_model(LLMModel("Llama", "3.1", 0.92, "PyTorch",
+                                context_window=128_000,
+                                parameter_count=70_000_000_000))
+    
+    print(f"\n📊 Registry: {registry}")
+    print(f"   Total models: {len(registry)}")
+    
+    print(f"\n🏆 Best model: {registry.get_best_model()}")
+    
+    print(f"\n🔥 PyTorch models:")
+    for m in registry.list_models_by_framework("PyTorch"):
+        print(f"   - {m}")
+    
+    print(f"\n🚀 Production-ready models (accuracy >= 0.90):")
+    for m in registry.list_production_ready():
+        print(f"   - {m}")
+    
+    # Demonstrating polymorphism — same method call, different behavior
+    print(f"\n🧬 Polymorphism demo (each model describes itself):")
+    for m in registry._models:
+        print(f"   {m}")    # AIModels print short, LLMModels print with context
+```
+
+**Expected output:**
+```
+✅ Added: ResNet 50 (PyTorch, grade B)
+✅ Added: YOLOv8 x (PyTorch, grade B)
+✅ Added: BERT base (TensorFlow, grade B)
+✅ Added: Claude Opus 4.7 (PyTorch, grade A) | context: 200,000 tokens
+✅ Added: Llama 3.1 (PyTorch, grade B) | context: 128,000 tokens
+
+📊 Registry: Smadavaram's AI Catalog (5 models)
+   Total models: 5
+
+🏆 Best model: Claude Opus 4.7 (PyTorch, grade A) | context: 200,000 tokens
+
+🔥 PyTorch models:
+   - ResNet 50 (PyTorch, grade B)
+   - YOLOv8 x (PyTorch, grade B)
+   - Claude Opus 4.7 (PyTorch, grade A) | context: 200,000 tokens
+   - Llama 3.1 (PyTorch, grade B) | context: 128,000 tokens
+```
+
+**What this experiment teaches:**
+- `AIModel` and `LLMModel` show **inheritance** — LLMs reuse all AIModel logic.
+- `super().__init__()` and `super().__str__()` show **calling parent methods**.
+- `@property` on `accuracy` shows **validation**.
+- `@property` on `grade` shows **computed attributes**.
+- `ModelRegistry` shows **composition** (HAS-A list of models, NOT inheritance).
+- `__str__` and `__repr__` show **clean output**.
+- `__len__` shows magic methods power Python built-ins.
+- The polymorphism loop shows the magic of OOP — same method call, different behavior depending on actual class.
+
+---
+
+#### Bonus Challenges
+
+1. **Add a `VisionModel(AIModel)` child class** with extra attributes `input_resolution` (tuple like `(224, 224)`) and `num_classes`. Override `__str__` to include the resolution.
+2. **Add a `remove_model(name)` method** to `ModelRegistry` that removes a model by name and returns `True` if found, `False` otherwise.
+3. **Add a `save_to_dict()` method** to `AIModel` that returns a dictionary of all attributes — this is the pattern used everywhere when serializing to JSON for APIs.
+4. **Add a `from_dict(data)` class method** using `@classmethod` that creates an `AIModel` from a dictionary. This is an "alternative constructor."
+5. **Implement `__eq__`** so two models with the same name and version are considered equal: `claude_v1 == claude_v1_copy` returns `True`.
+6. **Make `ModelRegistry` iterable** by adding `__iter__` so you can write `for model in registry:` instead of `for model in registry._models:`.
+
+---
+
+#### Common OOP Pitfalls (Things That Will Bite You)
+
+| Mistake | What Happens | Fix |
+|---|---|---|
+| Forgetting `self` in method definition | `TypeError: missing 1 required argument` | Always: `def method(self, ...)` |
+| Forgetting `self.` when storing | Data lost when method ends | `self.x = value`, not `x = value` |
+| Forgetting `super().__init__()` in child class | Parent's attributes never set, `AttributeError` later | First line of child `__init__` |
+| Mutable class attributes | All instances share the SAME list! | Use `self.items = []` in `__init__`, not `items = []` at class level |
+| Overusing inheritance | Brittle, deep hierarchies | Use composition ("HAS-A") when in doubt |
+| Defining only `__str__`, not `__repr__` | Lists/debuggers show ugly default | Always define `__repr__`; `__str__` optional |
+| Setting `self.accuracy = value` inside the `accuracy` setter | Infinite recursion → crash | Store in `self._accuracy` |
+| Using `__double_underscore` casually | Name mangling causes confusion | Use single `_underscore` instead |
+
+---
+
+#### Cheat Sheet — OOP
+
+```python
+# Defining a class
+class ClassName:
+    class_attribute = "shared by all"
+    
+    def __init__(self, arg1, arg2):       # Constructor
+        self.arg1 = arg1                   # Instance attributes
+        self._private = "convention only"  # Underscore = "internal"
+    
+    def instance_method(self):              # Regular method
+        return self.arg1
+    
+    @classmethod
+    def class_method(cls):                  # Acts on the class itself
+        return cls.class_attribute
+    
+    @classmethod
+    def from_dict(cls, data):               # Alternative constructor
+        return cls(data["arg1"], data["arg2"])
+    
+    @staticmethod
+    def static_method(x):                   # No self, no cls — utility
+        return x * 2
+    
+    @property
+    def computed_value(self):               # Read like an attribute
+        return self.arg1.upper()
+    
+    @computed_value.setter
+    def computed_value(self, value):        # Validate on assignment
+        if not value:
+            raise ValueError("Empty!")
+        self.arg1 = value
+    
+    def __str__(self):                      # Used by print()
+        return f"ClassName({self.arg1})"
+    
+    def __repr__(self):                     # Used by debugger, REPL
+        return f"ClassName(arg1={self.arg1!r})"
+
+# Inheritance
+class ChildClass(ParentClass):
+    def __init__(self, arg1, arg2, extra):
+        super().__init__(arg1, arg2)        # Run parent's __init__
+        self.extra = extra                   # Add new attribute
+    
+    def overridden_method(self):
+        base = super().overridden_method()  # Call parent's version
+        return f"{base} + child stuff"
+
+# Multiple inheritance (mixin pattern)
+class Trainable: pass
+class Serializable: pass
+class AIModel(Trainable, Serializable): pass
+
+# Using objects
+obj = ClassName("hello", "world")
+obj.instance_method()
+ClassName.class_method()
+ClassName.static_method(5)
+isinstance(obj, ClassName)                  # True
+print(ClassName.__mro__)                    # Method resolution order
+```
+
+#### Cheat Sheet — When to Use What
+
+| Need | Use |
+|---|---|
+| Fixed data, never changes | tuple |
+| Data + behavior together | class |
+| One thing IS-A another thing | inheritance |
+| One thing CONTAINS another | composition (store as attribute) |
+| Same data + different behavior per type | inheritance + method override |
+| Validate before saving an attribute | `@property` + `@x.setter` |
+| Calculate value from other attrs | `@property` (no setter = read-only) |
+| Helper that doesn't need object | `@staticmethod` |
+| Alternative constructor | `@classmethod` (e.g., `from_dict`) |
+| Make `print(obj)` look nice | `__str__` |
+| Make debugger output readable | `__repr__` |
+| Make `len(obj)` work | `__len__` |
+| Make `obj1 == obj2` work | `__eq__` |
+| Combine capabilities from multiple classes | multiple inheritance (mixins) |
+
+#### Cheat Sheet — Naming Conventions
+
+| Pattern | Meaning |
+|---|---|
+| `name` | Public attribute/method |
+| `_name` | "Internal — please don't touch" (convention) |
+| `__name` | Name-mangled to `_ClassName__name` |
+| `__name__` | Magic method — reserved for Python |
+| `ClassName` | PascalCase for classes |
+| `method_name` | snake_case for methods/variables |
+
+---
