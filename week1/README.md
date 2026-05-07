@@ -7085,3 +7085,843 @@ print(ClassName.__mro__)                    # Method resolution order
 | `method_name` | snake_case for methods/variables |
 
 ---
+
+
+
+## Day 6 — Essential Libraries Part 1: HTTP & Secrets (`requests` + `python-dotenv`)
+
+> **Why this day matters more than it looks.** Every single AI API call — Claude, GPT, Gemini, every open-source model on HuggingFace — is just an HTTP request with a secret API key. The fancy SDKs you'll use later (`anthropic`, `openai`) are wrappers around `requests`. If you understand today's lesson, you can call ANY AI service in the world, even ones that don't have an SDK yet. This is the day you stop being a "Power Platform person learning Python" and start thinking like an AI Engineer.
+
+---
+
+### The Big Picture — What's Actually Happening When You Use AI?
+
+When you used Copilot Studio, you talked to AI through a UI. You picked a model, typed a prompt, got a response. The platform hid all the plumbing.
+
+Today you learn the plumbing. Here's what every AI API call looks like under the hood:
+
+```
+YOUR PYTHON CODE                        ANTHROPIC'S SERVERS
+────────────────                        ───────────────────
+
+  prompt = "Write a haiku"
+        │
+        ▼
+  ┌──────────────────────┐
+  │  Build HTTP request  │
+  │  - URL               │              ┌──────────────────┐
+  │  - Headers (API key) │  ─────────▶  │  Claude model    │
+  │  - JSON body         │   internet   │  processes       │
+  │  - POST method       │              │  prompt          │
+  └──────────────────────┘              └──────────────────┘
+                                                │
+        ┌────────────────────────────────────────┘
+        ▼   internet
+  ┌──────────────────────┐
+  │  HTTP response       │
+  │  - Status code (200) │
+  │  - JSON body         │
+  │    └─ "haiku text"   │
+  └──────────────────────┘
+        │
+        ▼
+  Parse JSON, extract answer, show user
+```
+
+That's it. **AI APIs are just web APIs.** The model is doing the magic on their servers — your job is to:
+1. Send the right HTTP request (URL + headers + JSON body)
+2. Authenticate (API key in headers)
+3. Parse the response (JSON → Python dict → extract text)
+
+The `requests` library handles step 1 and 3. `python-dotenv` handles step 2 safely.
+
+#### Connecting to Your Power Platform Background
+
+If you've used the **HTTP connector** in Power Automate, you already know this conceptually:
+
+| Power Automate HTTP Connector | Python `requests` |
+|---|---|
+| Method dropdown (GET/POST) | `requests.get()` / `requests.post()` |
+| URI field | First argument to the function |
+| Headers section | `headers=` parameter |
+| Body section | `json=` parameter |
+| "Run" button | Pressing Enter in your script |
+| Connection references for secrets | `.env` file + `python-dotenv` |
+| Compose action to parse response | `response.json()` |
+
+You're not learning a new concept — you're learning the **code-first version** of something you already understand. The advantage: no flow runs limits, no licensing, runs anywhere, infinitely faster, and can be embedded in real applications.
+
+---
+
+### Installation
+
+```bash
+pip install requests python-dotenv
+```
+
+Verify both work:
+```python
+import requests
+import dotenv
+print(requests.__version__)   # e.g., 2.31.0
+print(dotenv.__version__)     # e.g., 1.0.0
+```
+
+If `import` works without errors, you're set.
+
+---
+
+### Part 1 — The `requests` Library
+
+`requests` is the most popular Python library, period. The Python team itself recommends it. It does ONE thing well: makes HTTP calls feel like talking to a friend.
+
+#### HTTP Methods — The 4 Verbs You Need to Know
+
+HTTP is built around verbs. Each verb has a meaning. APIs are designed around them.
+
+| Verb | What It Means | Real-world Equivalent | AI Example |
+|---|---|---|---|
+| **GET** | "Give me data" | Reading a webpage | List your past Claude conversations |
+| **POST** | "Here's new data, create it" | Submitting a form | Send a prompt, get a response |
+| **PUT** | "Replace this thing entirely" | Editing a Word doc | Update a file in cloud storage |
+| **DELETE** | "Remove this" | Deleting an email | Delete a stored conversation |
+
+For AI work, you'll use **GET and POST 95% of the time**. POST especially — every prompt you send is a POST request.
+
+#### Your First GET Request
+
+```python
+import requests
+
+response = requests.get("https://jsonplaceholder.typicode.com/posts/1")
+
+print(response.status_code)   # 200 = success
+print(response.text)          # Raw text response
+print(response.json())        # Same response, parsed as Python dict
+```
+
+**What just happened:**
+1. Your computer sent a GET request to that URL
+2. The server responded with JSON data + a status code
+3. `response` is an object holding everything: status, headers, body
+4. `.json()` converts the JSON text into a Python dict so you can use it
+
+**The `response` object — what's inside:**
+
+```python
+response.status_code    # 200, 404, 500, etc. (always check this first!)
+response.text           # Raw response body as a string
+response.json()         # Parsed JSON as Python dict (only works if response IS JSON)
+response.headers        # Dict of response headers (content-type, rate-limit info, etc.)
+response.url            # The actual URL hit (useful when there were redirects)
+response.elapsed        # How long the request took (timedelta object)
+response.ok             # True if status_code is 200-299, else False
+```
+
+#### Status Codes — The 5 Categories
+
+Every HTTP response comes with a 3-digit status code. The first digit tells you the category.
+
+| Range | Category | What It Means | Common Examples |
+|---|---|---|---|
+| **1xx** | Informational | Rare, ignore for now | — |
+| **2xx** | ✅ Success | Everything worked | `200 OK`, `201 Created` |
+| **3xx** | Redirect | "Look elsewhere" | `301 Moved`, `304 Not Modified` |
+| **4xx** | ❌ YOUR fault | You sent a bad request | `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `429 Too Many Requests` |
+| **5xx** | ❌ THEIR fault | The server crashed | `500 Internal Server Error`, `503 Service Unavailable` |
+
+**The codes you'll meet daily as an AI Engineer:**
+
+```
+200  ✅ Got the AI response, all good
+201  ✅ Created a new resource (e.g., uploaded a file)
+400  ❌ Your prompt or JSON body was malformed
+401  ❌ Invalid API key
+403  ❌ API key valid but no permission for this action
+404  ❌ Wrong URL endpoint
+429  ❌ Rate limited — slow down or pay for higher tier
+500  ❌ AI provider is having a bad day
+529  ❌ Anthropic-specific: overloaded, retry later
+```
+
+> **Mental model:** 4xx = "I (the client) screwed up." 5xx = "They (the server) screwed up." Memorize this and debugging becomes 10x easier.
+
+#### Query Parameters — Adding Data to GET Requests
+
+Query parameters are the `?key=value&other=thing` part of URLs.
+
+**The hard way (string concatenation — don't do this):**
+```python
+city = "Hyderabad"
+url = f"https://api.example.com/weather?city={city}&units=metric"
+response = requests.get(url)
+```
+
+**The clean way (`params` argument):**
+```python
+response = requests.get(
+    "https://api.example.com/weather",
+    params={
+        "city": "Hyderabad",
+        "units": "metric",
+        "lang": "en"
+    }
+)
+```
+
+`requests` builds the URL for you, automatically URL-encodes special characters (spaces → `%20`, etc.), and the code reads way better. **Always use `params=`.**
+
+#### Headers — Metadata About Your Request
+
+Headers are information about the request itself, not the data. Think of them as the envelope, while the body is the letter inside.
+
+```python
+response = requests.get(
+    "https://api.example.com/data",
+    headers={
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json",
+        "User-Agent": "MyApp/1.0"
+    }
+)
+```
+
+**The 3 headers you'll see in every AI API call:**
+
+| Header | What It Does | Example |
+|---|---|---|
+| `Authorization` or `x-api-key` | Proves who you are | `Bearer sk-ant-...` |
+| `Content-Type` | "I'm sending JSON" | `application/json` |
+| `anthropic-version` (Claude-specific) | Which API version | `2023-06-01` |
+
+#### Your First POST Request — Sending Data
+
+POST is for creating things. The data goes in the **body** of the request, not the URL.
+
+```python
+import requests
+
+response = requests.post(
+    "https://jsonplaceholder.typicode.com/posts",
+    json={
+        "title": "My first post",
+        "body": "This is the body of my post",
+        "userId": 1
+    }
+)
+
+print(response.status_code)   # 201 (Created)
+print(response.json())        # The created post with an assigned ID
+```
+
+> **Critical detail:** Use `json=` (not `data=`). `json=` automatically:
+> 1. Converts your Python dict to JSON text
+> 2. Adds the `Content-Type: application/json` header
+> 3. Encodes everything correctly
+>
+> If you use `data=` with a dict, it sends form data (like a HTML form submission), which most APIs don't accept.
+
+#### Calling Claude API Manually — The "AHA!" Moment
+
+This is what every AI engineer does dozens of times a day. After today, you can do this without the SDK:
+
+```python
+import requests
+
+response = requests.post(
+    "https://api.anthropic.com/v1/messages",
+    headers={
+        "x-api-key": "sk-ant-your-key-here",   # We'll move this to .env in Part 2
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1024,
+        "messages": [
+            {"role": "user", "content": "Write a haiku about Python."}
+        ]
+    }
+)
+
+# Parse the response
+data = response.json()
+haiku = data["content"][0]["text"]
+print(haiku)
+```
+
+That's it. **That's the entire AI engineer workflow.** Everything you'll build for the rest of your career — chatbots, RAG systems, agents — is variations of this 12 lines of code.
+
+---
+
+#### Error Handling — The Mark of a Real Engineer
+
+Beginner code assumes everything works. Production code assumes everything will break. APIs fail constantly: networks drop, rate limits hit, servers crash. You MUST handle this.
+
+**The naive (broken) version:**
+```python
+response = requests.get("https://api.example.com/data")
+data = response.json()         # Crashes if response is HTML error page
+print(data["users"][0])        # Crashes if "users" key doesn't exist
+```
+
+**The robust version:**
+```python
+import requests
+
+try:
+    response = requests.get(
+        "https://api.example.com/data",
+        timeout=10                              # Don't wait forever
+    )
+    response.raise_for_status()                 # Raise exception for 4xx/5xx
+    data = response.json()
+    print(data)
+
+except requests.exceptions.Timeout:
+    print("Request timed out — server too slow")
+
+except requests.exceptions.ConnectionError:
+    print("Couldn't connect — check internet")
+
+except requests.exceptions.HTTPError as e:
+    print(f"HTTP error: {e.response.status_code}")
+    print(f"Server said: {e.response.text}")
+
+except requests.exceptions.JSONDecodeError:
+    print("Response wasn't valid JSON")
+
+except requests.exceptions.RequestException as e:
+    print(f"Something else went wrong: {e}")
+```
+
+#### The Exceptions You'll Actually See
+
+| Exception | When It Happens | What To Do |
+|---|---|---|
+| `Timeout` | Server didn't respond in `timeout=` seconds | Retry, or increase timeout |
+| `ConnectionError` | Can't reach the server (DNS, no internet) | Check network, retry |
+| `HTTPError` | Got a 4xx or 5xx response | Read the error body for details |
+| `JSONDecodeError` | Response body isn't valid JSON | Probably an HTML error page — print `.text` |
+| `RequestException` | Catch-all parent class | Always include this last as a safety net |
+
+#### `timeout=` — The Most Forgotten Argument
+
+```python
+# ⚠️ NEVER do this in production:
+response = requests.get(url)    # No timeout = could hang forever
+
+# ✅ Always set a timeout:
+response = requests.get(url, timeout=10)   # Wait max 10 seconds
+```
+
+**Why this matters for AI:** Claude can take 30+ seconds to respond to long prompts. OpenAI similar. If you forget `timeout`, your script can hang indefinitely on a flaky network. Common defaults:
+- Quick API checks: `timeout=5`
+- AI completion calls: `timeout=60`
+- AI calls with big prompts/streaming: `timeout=120`
+
+#### `raise_for_status()` — One Line, Saves Hours
+
+```python
+response = requests.get(url)
+response.raise_for_status()   # Raises HTTPError for 4xx/5xx
+```
+
+Without this, a 404 still gets you a `response` object — `.json()` might even work (returning the error JSON). You'll think things succeeded and get confusing bugs downstream. **Always call `raise_for_status()` after every request unless you have a specific reason not to.**
+
+---
+
+### Part 2 — `python-dotenv`: The Secrets Problem
+
+#### Why You Should Be Scared of API Keys
+
+Your Claude API key is **money**. Anyone who has it can spend your account dry. There are bots that scan GitHub 24/7 looking for committed API keys. They've been measured to find and abuse keys **within 60 seconds** of the commit going public.
+
+**The disaster scenario (this happens to people every single day):**
+
+```python
+# main.py — pushed to GitHub
+import requests
+
+API_KEY = "sk-ant-real-key-here"   # ← The mistake
+
+response = requests.post(
+    "https://api.anthropic.com/v1/messages",
+    headers={"x-api-key": API_KEY},
+    ...
+)
+```
+
+```bash
+git add .
+git commit -m "first AI app"
+git push                       # ← Key now public on GitHub
+                               # ← Bots find it within minutes
+                               # ← Your account gets drained
+                               # ← You wake up to an email from Anthropic
+```
+
+**Even if you delete the file later and force-push, it's still in Git history forever.** The only fix is to revoke the key immediately and generate a new one.
+
+#### The `.env` Pattern — How Real Engineers Solve This
+
+The pattern has 3 pieces:
+
+```
+your-project/
+├── .env                ← Real secrets live here (NEVER committed)
+├── .env.example        ← Template with FAKE values (committed, helps teammates)
+├── .gitignore          ← Tells Git to ignore .env
+└── main.py             ← Reads from .env via os.getenv()
+```
+
+**Step 1 — Create `.env` (your real secrets):**
+```
+ANTHROPIC_API_KEY=sk-ant-api03-real-key-here
+OPENWEATHER_API_KEY=abc123realkey
+DATABASE_URL=postgresql://user:password@localhost/mydb
+```
+
+> **Format rules:**
+> - No spaces around `=` (write `KEY=value`, not `KEY = value`)
+> - No quotes needed unless value has spaces
+> - One key per line
+> - Comments start with `#`
+
+**Step 2 — Create `.gitignore` (BEFORE your first commit!):**
+```
+# Secrets
+.env
+*.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+```
+
+**Step 3 — Create `.env.example` (committed, helps teammates):**
+```
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+OPENWEATHER_API_KEY=your-openweather-key
+DATABASE_URL=postgresql://user:password@host/db
+```
+
+This file is committed to GitHub. Teammates copy it to `.env` and fill in their own real values. Standard practice in every professional codebase.
+
+**Step 4 — Read secrets in Python:**
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()                               # Reads .env into environment variables
+
+api_key = os.getenv("ANTHROPIC_API_KEY")    # Returns the value, or None if missing
+
+if not api_key:
+    raise ValueError("ANTHROPIC_API_KEY not set! Check your .env file.")
+```
+
+#### How `load_dotenv()` Actually Works
+
+```
+your script starts
+       │
+       ▼
+load_dotenv() is called
+       │
+       ▼
+Looks for .env file in current folder, then parent folders
+       │
+       ▼
+Reads each line, parses KEY=VALUE
+       │
+       ▼
+Sets each as a temporary environment variable (just for this Python process)
+       │
+       ▼
+os.getenv("KEY") can now read it
+       │
+       ▼
+When script ends, environment variables disappear (no permanent change)
+```
+
+This is the same idea as the PATH environment variable from your Day 1 setup, but scoped to just this script run.
+
+#### `os.getenv()` vs `os.environ[]` — Subtle But Important
+
+```python
+# os.getenv() — returns None if missing (safe)
+api_key = os.getenv("ANTHROPIC_API_KEY")
+# api_key is None if not set, no crash
+
+# os.getenv() with default
+api_key = os.getenv("ANTHROPIC_API_KEY", "fallback-value")
+
+# os.environ[] — crashes if missing
+api_key = os.environ["ANTHROPIC_API_KEY"]
+# KeyError if not set
+```
+
+**Best practice for required secrets:**
+```python
+api_key = os.getenv("ANTHROPIC_API_KEY")
+if not api_key:
+    raise ValueError(
+        "ANTHROPIC_API_KEY not found. "
+        "Create a .env file with: ANTHROPIC_API_KEY=your-key-here"
+    )
+```
+
+This **fails fast with a helpful message** instead of mysteriously crashing 50 lines later.
+
+#### Your "Did I Already Leak the Key?" Checklist
+
+Before every push, do this mental check:
+1. Is `.env` in my `.gitignore`? Run `git status` — `.env` should NOT appear in any color.
+2. Did I `git add .env` accidentally before adding it to `.gitignore`? Run `git ls-files | grep env` — should show `.env.example` only, not `.env`.
+3. If you ever see `.env` listed as a tracked file, **stop, do not push, ask for help removing it from history.**
+
+---
+
+### Part 3 — Putting It All Together (Claude API, Properly)
+
+This is the production-quality version of the earlier example. Save this snippet — you'll use this pattern hundreds of times.
+
+```python
+# claude_call.py
+import os
+import requests
+from dotenv import load_dotenv
+
+# Load secrets from .env
+load_dotenv()
+API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+if not API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY not set in .env")
+
+def ask_claude(prompt: str) -> str:
+    """Send a prompt to Claude and return the text response."""
+    try:
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": API_KEY,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1024,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["content"][0]["text"]
+
+    except requests.exceptions.HTTPError as e:
+        return f"API error {e.response.status_code}: {e.response.text}"
+    except requests.exceptions.Timeout:
+        return "Request timed out"
+    except requests.exceptions.RequestException as e:
+        return f"Request failed: {e}"
+
+# Use it
+if __name__ == "__main__":
+    answer = ask_claude("Write a haiku about debugging Python.")
+    print(answer)
+```
+
+This is **professional AI engineer code**. It handles errors, uses environment variables, has a clear function signature, and works.
+
+---
+
+### Day 6 Experiments
+
+#### Experiment 1 — Weather App with OpenWeatherMap
+
+**Get your free API key:**
+1. Go to [openweathermap.org](https://openweathermap.org/api), sign up
+2. Go to "API keys" tab, copy your key
+3. ⚠️ Note: New keys take ~10 minutes to activate
+
+**Add it to your `.env`:**
+```
+OPENWEATHER_API_KEY=your-key-here
+```
+
+**Build the app:**
+```python
+# weather_app.py
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+def get_weather(city: str) -> dict:
+    """Fetch weather for a city. Returns parsed JSON or raises."""
+    response = requests.get(
+        "https://api.openweathermap.org/data/2.5/weather",
+        params={
+            "q": city,
+            "appid": API_KEY,
+            "units": "metric"   # Celsius. Use "imperial" for Fahrenheit.
+        },
+        timeout=10
+    )
+    response.raise_for_status()
+    return response.json()
+
+def display_weather(city: str):
+    try:
+        data = get_weather(city)
+
+        temp = data["main"]["temp"]
+        feels_like = data["main"]["feels_like"]
+        humidity = data["main"]["humidity"]
+        description = data["weather"][0]["description"]
+        wind_speed = data["wind"]["speed"]
+
+        print(f"\n🌤️  Weather in {city}")
+        print(f"   Condition:  {description.title()}")
+        print(f"   Temperature: {temp}°C (feels like {feels_like}°C)")
+        print(f"   Humidity:    {humidity}%")
+        print(f"   Wind speed:  {wind_speed} m/s\n")
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            print(f"❌ City '{city}' not found")
+        elif e.response.status_code == 401:
+            print("❌ Invalid API key (or wait 10 mins for activation)")
+        else:
+            print(f"❌ HTTP error: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Request failed: {e}")
+
+if __name__ == "__main__":
+    city = input("Enter city name: ")
+    display_weather(city)
+```
+
+**Bonus challenges:**
+1. Loop and ask for weather in 5 different cities; show the hottest
+2. Save each query result to a list of dicts; print as a table at the end
+3. Convert wind speed from m/s to km/h (multiply by 3.6)
+4. Use `data["sys"]["country"]` to print the country code too
+
+#### Experiment 2 — JSONPlaceholder API (No Key Needed)
+
+[JSONPlaceholder](https://jsonplaceholder.typicode.com) is a fake REST API for practice. No key, no signup.
+
+```python
+# jsonplaceholder_practice.py
+import requests
+
+BASE_URL = "https://jsonplaceholder.typicode.com"
+
+def get_all_posts():
+    """GET all 100 posts."""
+    response = requests.get(f"{BASE_URL}/posts", timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+def get_posts_by_user(user_id: int):
+    """GET posts filtered by userId using query params."""
+    response = requests.get(
+        f"{BASE_URL}/posts",
+        params={"userId": user_id},
+        timeout=10
+    )
+    response.raise_for_status()
+    return response.json()
+
+def create_post(title: str, body: str, user_id: int):
+    """POST a new post."""
+    response = requests.post(
+        f"{BASE_URL}/posts",
+        json={
+            "title": title,
+            "body": body,
+            "userId": user_id
+        },
+        timeout=10
+    )
+    response.raise_for_status()
+    return response.json()
+
+def get_nonexistent_post():
+    """Trigger a 404 to practice error handling."""
+    try:
+        response = requests.get(f"{BASE_URL}/posts/9999", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        print(f"Caught error as expected: {e.response.status_code}")
+        return None
+
+if __name__ == "__main__":
+    # Task 1: Get all posts, count them
+    posts = get_all_posts()
+    print(f"Total posts: {len(posts)}")
+
+    # Task 2: Get posts by user 1, print titles
+    user_posts = get_posts_by_user(1)
+    print(f"\nUser 1 has {len(user_posts)} posts:")
+    for post in user_posts:
+        print(f"  - {post['title']}")
+
+    # Task 3: Create a new post
+    new_post = create_post(
+        title="My Day 6 learning",
+        body="Today I learned requests and dotenv!",
+        user_id=1
+    )
+    print(f"\nCreated post with ID: {new_post['id']}")
+
+    # Task 4: Trigger and handle 404
+    print("\nTrying nonexistent post...")
+    get_nonexistent_post()
+```
+
+> **Note about JSONPlaceholder:** It "fakes" the POST — it returns a fake ID like 101 but doesn't actually save anything. The point is to practice the request/response cycle without messing up real data.
+
+**Bonus challenges:**
+1. GET `/users/1` → print that user's name, email, and address.city
+2. GET `/users/1/posts` → all posts by user 1 using a different endpoint
+3. GET `/posts/1/comments` → all comments on post 1
+4. Build a function `get_user_with_posts(user_id)` that combines two API calls and returns one merged dict
+
+#### Experiment 3 — Bonus: Direct Claude Call
+
+If you have a Claude API key, run the `claude_call.py` from Part 3 above. This is the "I am now an AI engineer" moment — calling an LLM directly without any SDK.
+
+If you don't have a key yet, get one from [console.anthropic.com](https://console.anthropic.com) on Day 9 when we cover it formally. For now, you can run the same logic against the JSONPlaceholder API — the *pattern* is what matters today.
+
+---
+
+### Common Pitfalls (I Will Definitely Hit These)
+
+| Mistake | Symptom | Fix |
+|---|---|---|
+| Hardcoded API key in code | Bot drains your account | Use `.env` from day one |
+| Forgot `.gitignore` before first commit | Key already on GitHub | Revoke key, generate new one, add `.gitignore`, force-push |
+| Forgot `load_dotenv()` | `os.getenv()` returns `None` | Add `load_dotenv()` at top of script |
+| Forgot `timeout=` | Script hangs forever | Always pass `timeout=` |
+| Used `data=` instead of `json=` | API returns 400 Bad Request | Use `json=` for JSON APIs |
+| Forgot `.raise_for_status()` | Errors silently ignored | Always call it after `.get()`/`.post()` |
+| Called `.json()` on HTML response | `JSONDecodeError` crash | Print `response.text` first to see what came back |
+| Used `os.environ["KEY"]` for optional var | KeyError crash | Use `os.getenv("KEY")` instead |
+| API key has trailing spaces in `.env` | 401 Unauthorized | Check for invisible whitespace |
+| `.env` file has quotes around values | Value includes the quotes | Remove the quotes |
+
+---
+
+### Cheat Sheet — Day 6
+
+#### `requests` essentials
+```python
+import requests
+
+# GET with query params
+r = requests.get(url, params={"key": "value"}, timeout=10)
+
+# POST with JSON body
+r = requests.post(url, json={"key": "value"}, headers={...}, timeout=10)
+
+# Always after every request
+r.raise_for_status()           # Raises if 4xx/5xx
+data = r.json()                # Parse JSON to dict
+
+# Useful response attributes
+r.status_code                  # 200, 404, etc.
+r.text                         # Raw text body
+r.headers                      # Response headers as dict
+r.elapsed                      # How long it took
+r.ok                           # True if 2xx
+
+# Bulletproof error handling
+try:
+    r = requests.get(url, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+except requests.exceptions.Timeout:        ...
+except requests.exceptions.HTTPError as e: ...
+except requests.exceptions.RequestException as e: ...
+```
+
+#### `python-dotenv` essentials
+```python
+# .env file
+ANTHROPIC_API_KEY=sk-ant-...
+
+# .gitignore — MUST include
+.env
+
+# In Python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+key = os.getenv("ANTHROPIC_API_KEY")
+if not key:
+    raise ValueError("ANTHROPIC_API_KEY not set")
+```
+
+#### Claude API call template (memorize this)
+```python
+response = requests.post(
+    "https://api.anthropic.com/v1/messages",
+    headers={
+        "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "Hello!"}]
+    },
+    timeout=60
+)
+response.raise_for_status()
+text = response.json()["content"][0]["text"]
+```
+
+---
+
+### Push to GitHub
+
+```bash
+# Verify .env is NOT being tracked
+git status
+# .env should NOT appear. .env.example should appear.
+
+# If .env appears, STOP and add it to .gitignore first!
+
+git add .
+git commit -m "Day 6: requests + dotenv, weather app, JSONPlaceholder practice"
+git push
+```
+
+---
+
+> **Note to future me:** Today was the day everything clicked. Every AI API in existence — Claude, GPT, Gemini, local LLaMA servers, HuggingFace, Pinecone, every vector DB — speaks HTTP + JSON. You now speak that language. The fancy SDKs you'll use later (`anthropic`, `openai`, `langchain`) are just abstractions over what you did today. When something breaks in production at 2am, the SDK won't help you — but the `requests` debugging skills you built today will.
+
+> **Power Platform parallel:** Day 6 is your "HTTP connector" but better. No flow runs limit, no licensing, runs anywhere, returns instantly. Same mental model: trigger → action → parse response. Different power level entirely.
